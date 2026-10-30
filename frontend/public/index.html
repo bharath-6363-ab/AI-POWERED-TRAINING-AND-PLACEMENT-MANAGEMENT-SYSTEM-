@@ -1,0 +1,1729 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>AI-TPMS - Intelligent Training & Placement Management System</title>
+        <meta name="description"
+            content="AI-Powered Training and Placement Management System with multi-modal interview analytics, ATS resume audit, and 47 campus placement drives.">
+
+        <!-- Google Fonts: Plus Jakarta Sans, Inter, JetBrains Mono -->
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+            rel="stylesheet">
+
+        <!-- External CDNs -->
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {
+                darkMode: 'class',
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                            display: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
+                            mono: ['"JetBrains Mono"', 'monospace'],
+                        },
+                        colors: {
+                            primary: {
+                                50: '#eef2ff',
+                                100: '#e0e7ff',
+                                500: '#6366f1',
+                                600: '#4f46e5',
+                                700: '#4338ca',
+                                800: '#3730a3',
+                            }
+                        }
+                    }
+                }
+            }
+        </script>
+        <script src="https://unpkg.com/lucide@latest"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+        <!-- Custom SaaS Stylesheet -->
+        <link rel="stylesheet" href="/static/app.css">
+    </head>
+
+    <body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex min-h-screen">
+
+        <!-- ========================================================================= -->
+        <!-- DESKTOP SIDEBAR NAVIGATION                                                -->
+        <!-- ========================================================================= -->
+        <aside id="desktopSidebar"
+            class="w-64 bg-slate-900 border-r border-slate-800 text-slate-300 hidden md:flex flex-col shrink-0 select-none z-30 transition-all duration-300">
+            <!-- Logo & Branding -->
+            <div class="h-16 px-5 flex items-center gap-3 border-b border-slate-800/80">
+                <div
+                    class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+                    <i data-lucide="graduation-cap" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <span class="font-extrabold text-sm text-white tracking-tight block">AI-TPMS Portal</span>
+                    <span class="text-[10px] text-indigo-400 font-medium block">Enterprise SaaS Suite</span>
+                </div>
+            </div>
+
+            <!-- Navigation Links Container -->
+            <div class="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+                <!-- Student Module -->
+                <div class="space-y-1">
+                    <span class="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">Main
+                        Navigation</span>
+                    <a href="javascript:void(0)" onclick="switchTab('dashboard')" data-tab="dashboard"
+                        class="sidebar-link active">
+                        <i data-lucide="layout-dashboard" class="w-4 h-4 text-indigo-400"></i>
+                        <span>Overview</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="switchTab('resume')" data-tab="resume" class="sidebar-link">
+                        <i data-lucide="file-text" class="w-4 h-4 text-slate-400"></i>
+                        <span>My Resume</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="switchTab('practice')" data-tab="practice"
+                        class="sidebar-link">
+                        <i data-lucide="book-open" class="w-4 h-4 text-slate-400"></i>
+                        <span>Concept Practice</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="switchTab('interview')" data-tab="interview"
+                        class="sidebar-link">
+                        <i data-lucide="video" class="w-4 h-4 text-slate-400"></i>
+                        <span>AI Mock Interview</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="switchTab('hr-interview')" data-tab="hr-interview"
+                        class="sidebar-link">
+                        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+                        <span>HR Interview Prep</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="switchTab('placement')" data-tab="placement"
+                        class="sidebar-link">
+                        <i data-lucide="briefcase" class="w-4 h-4 text-slate-400"></i>
+                        <span>Jobs & Eligibility</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="switchTab('mentor')" data-tab="mentor" class="sidebar-link">
+                        <i data-lucide="bot" class="w-4 h-4 text-purple-400"></i>
+                        <span>AI Career Mentor</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="switchTab('history')" data-tab="history" class="sidebar-link">
+                        <i data-lucide="history" class="w-4 h-4 text-slate-400"></i>
+                        <span>History & Dossiers</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="switchTab('profile')" data-tab="profile" class="sidebar-link">
+                        <i data-lucide="user-cog" class="w-4 h-4 text-slate-400"></i>
+                        <span>Profile & Settings</span>
+                    </a>
+                </div>
+
+                <!-- Admin Section (Conditionally displayed for admin/trainer) -->
+                <div id="adminNavSection" class="space-y-1 hidden pt-2 border-t border-slate-800">
+                    <span
+                        class="px-3 text-[10px] font-bold uppercase tracking-wider text-indigo-400 block mb-2">Placement
+                        Administration</span>
+                    <a href="javascript:void(0)" onclick="switchTab('admin')" data-tab="admin" class="sidebar-link">
+                        <i data-lucide="shield-check" class="w-4 h-4 text-indigo-400"></i>
+                        <span>Admin Overview</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="switchTab('admin-candidates')" data-tab="admin-candidates"
+                        class="sidebar-link">
+                        <i data-lucide="users-2" class="w-4 h-4 text-slate-400"></i>
+                        <span>Candidate Roster</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="switchTab('admin-diagnostics')" data-tab="admin-diagnostics"
+                        class="sidebar-link">
+                        <i data-lucide="activity" class="w-4 h-4 text-slate-400"></i>
+                        <span>System Diagnostics</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Sidebar Footer / Quick Status -->
+            <div class="p-3.5 border-t border-slate-800 bg-slate-950/40 text-xs flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span class="text-[11px] text-slate-400 font-mono">FastAPI :8080</span>
+                </div>
+                <button onclick="logoutUser()" title="Sign Out"
+                    class="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-white/5 transition cursor-pointer">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- ========================================================================= -->
+        <!-- MOBILE SIDEBAR DRAWER                                                     -->
+        <!-- ========================================================================= -->
+        <div id="mobileSidebar" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden md:hidden flex">
+            <div class="w-72 bg-slate-900 border-r border-slate-800 text-slate-300 flex flex-col h-full p-4 space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div class="flex items-center gap-2.5">
+                        <div class="p-1.5 bg-indigo-600 rounded-lg text-white">
+                            <i data-lucide="graduation-cap" class="w-5 h-5"></i>
+                        </div>
+                        <span class="font-bold text-white text-sm">AI-TPMS Portal</span>
+                    </div>
+                    <button onclick="toggleMobileSidebar()" class="text-slate-400 hover:text-white p-1">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-y-auto space-y-1">
+                    <a href="javascript:void(0)" onclick="switchTab('dashboard')" class="sidebar-link">Overview</a>
+                    <a href="javascript:void(0)" onclick="switchTab('resume')" class="sidebar-link">My Resume</a>
+                    <a href="javascript:void(0)" onclick="switchTab('practice')" class="sidebar-link">Concept
+                        Practice</a>
+                    <a href="javascript:void(0)" onclick="switchTab('interview')" class="sidebar-link">AI Mock
+                        Interview</a>
+                    <a href="javascript:void(0)" onclick="switchTab('hr-interview')" class="sidebar-link">HR Interview
+                        Prep</a>
+                    <a href="javascript:void(0)" onclick="switchTab('placement')" class="sidebar-link">Jobs & 47
+                        Drives</a>
+                    <a href="javascript:void(0)" onclick="switchTab('mentor')" class="sidebar-link">AI Career Mentor</a>
+                    <a href="javascript:void(0)" onclick="switchTab('history')" class="sidebar-link">History &
+                        Dossiers</a>
+                    <a href="javascript:void(0)" onclick="switchTab('profile')" class="sidebar-link">Profile &
+                        Settings</a>
+                </div>
+                <div class="pt-3 border-t border-slate-800">
+                    <button onclick="logoutUser()"
+                        class="w-full py-2 bg-rose-600/20 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-bold flex items-center justify-center gap-2">
+                        <i data-lucide="log-out" class="w-4 h-4"></i> Sign Out
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1" onclick="toggleMobileSidebar()"></div>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- MAIN APPLICATION WRAPPER                                                  -->
+        <!-- ========================================================================= -->
+        <div class="flex-1 flex flex-col min-w-0 overflow-y-auto">
+
+            <!-- Top Header Bar -->
+            <header
+                class="h-16 top-header-glass sticky top-0 z-20 px-4 sm:px-8 flex items-center justify-between gap-4">
+                <!-- Mobile Menu Toggle & Title -->
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleMobileSidebar()"
+                        class="p-2 md:hidden text-slate-500 hover:text-slate-900 dark:hover:text-white rounded-lg">
+                        <i data-lucide="menu" class="w-5 h-5"></i>
+                    </button>
+                    <div>
+                        <span id="headerBreadcrumbSection"
+                            class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block font-mono">Student
+                            Portal</span>
+                        <h1 id="headerPageTitle"
+                            class="text-base font-extrabold font-display text-slate-900 dark:text-white leading-tight">
+                            Executive Overview</h1>
+                    </div>
+                </div>
+
+                <!-- Spotlight Command Search (⌘K Command Bar) -->
+                <div class="hidden lg:flex header-search-bar">
+                    <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400"></i>
+                    <input type="text" id="globalQuickSearch" placeholder="Search 47 drives, DSA topics, dossiers..."
+                        class="header-search-input" onkeyup="if(event.key==='Enter') switchTab('placement')" />
+                    <span class="cmd-key-badge">⌘K</span>
+                </div>
+
+                <!-- Header Actions: Search, Theme Toggle, User Profile, Logout -->
+                <div class="flex items-center gap-3">
+                    <!-- Theme Toggle Button -->
+                    <button id="btnThemeToggle" onclick="toggleTheme()"
+                        class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition cursor-pointer text-slate-600 dark:text-slate-300 shadow-xs"
+                        title="Toggle Theme">
+                        <i data-lucide="moon" class="w-4 h-4"></i>
+                    </button>
+
+                    <!-- Role Badge -->
+                    <span id="roleBadge" class="badge badge-emerald font-mono hidden sm:inline-flex">STUDENT</span>
+
+                    <!-- User Profile Pill -->
+                    <div class="flex items-center gap-2.5 pl-2 border-l border-slate-200 dark:border-slate-800">
+                        <div id="userAvatarInitials"
+                            class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 via-purple-600 to-indigo-700 text-white font-bold text-xs flex items-center justify-center shadow-md shadow-indigo-500/20 ring-2 ring-indigo-500/20">
+                            ST
+                        </div>
+                        <div class="hidden sm:block text-left">
+                            <span id="userDisplayName"
+                                class="text-xs font-bold font-display text-slate-900 dark:text-white block leading-tight">Candidate</span>
+                            <span id="userEmailDisplay"
+                                class="text-[10px] text-slate-400 block font-mono">student@college.edu</span>
+                        </div>
+                    </div>
+
+                    <!-- Sign Out -->
+                    <button onclick="logoutUser()" title="Sign Out"
+                        class="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer">
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Main Dynamic Content Views -->
+            <main class="flex-1 p-4 sm:p-8 max-w-7xl mx-auto w-full space-y-8">
+
+                <!-- ================================================================= -->
+                <!-- VIEW 1: EXECUTIVE DASHBOARD                                       -->
+                <!-- ================================================================= -->
+                <div id="view-dashboard" class="view-panel space-y-6">
+                    <!-- Welcome Banner -->
+                    <div
+                        class="hero-banner-animated p-6 md:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-6 border border-white/10 relative overflow-hidden">
+                        <div class="space-y-2 relative z-10">
+                            <div class="flex items-center gap-2.5">
+                                <span
+                                    class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    <span class="beacon-dot"></span>
+                                    <span>Recruitment Pipelines Active</span>
+                                </span>
+                                <span class="text-xs text-indigo-300 font-mono">• 47 Corporate Drives Open</span>
+                            </div>
+                            <div class="flex items-center gap-3 pt-1">
+                                <span class="text-2xl animate-bounce">👋</span>
+                                <h2 class="text-xl md:text-2xl font-extrabold font-display tracking-tight text-white">
+                                    Welcome back, <span id="dashWelcomeName"
+                                        class="text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-200 to-indigo-400">Candidate</span>
+                                </h2>
+                            </div>
+                            <p class="text-xs text-indigo-200/90 max-w-xl leading-relaxed">
+                                Your comprehensive multi-modal performance dossier, adaptive mock interview rubrics, and
+                                FAANG L4 debugging drills are synced.
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 relative z-10">
+                            <button onclick="switchTab('interview')" class="btn-primary py-2.5 px-4 text-xs">
+                                <i data-lucide="video" class="w-4 h-4"></i>
+                                <span>Start Mock Interview</span>
+                            </button>
+                            <button onclick="launchDebuggingFromDashboard()"
+                                class="btn-secondary bg-purple-600/30 text-purple-200 border-purple-400/40 hover:bg-purple-600/50 py-2.5 px-4 text-xs flex items-center gap-2 cursor-pointer transition shadow-sm">
+                                <i data-lucide="terminal" class="w-4 h-4 text-amber-300"></i>
+                                <span>AI Code Debugger</span>
+                            </button>
+                            <button onclick="downloadMyReport()"
+                                class="btn-secondary bg-white/10 text-white border-white/20 hover:bg-white/20 py-2.5 px-4 text-xs flex items-center gap-1.5">
+                                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                                <span>PDF Dossier</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 4 Core Performance KPI Cards (Bento SaaS Architecture) -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- KPI 1: Attendance -->
+                        <div class="saas-card kpi-card p-5 space-y-3 flex flex-col justify-between">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2.5">
+                                    <div
+                                        class="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
+                                        <i data-lucide="calendar-check" class="w-4 h-4"></i>
+                                    </div>
+                                    <span
+                                        class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Attendance</span>
+                                </div>
+                                <span id="kpiAttendanceBadge" class="badge badge-emerald">Eligible</span>
+                            </div>
+                            <div>
+                                <span id="kpiAttendanceVal"
+                                    class="text-3xl font-black font-display text-slate-900 dark:text-white kpi-number">88.5%</span>
+                            </div>
+                            <div
+                                class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                                <span>Cutoff: ≥ 75.0%</span>
+                                <span class="text-emerald-500 font-semibold font-mono flex items-center gap-1">
+                                    <i data-lucide="check" class="w-3 h-3"></i> +3.5% safe
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- KPI 2: Technical Core -->
+                        <div class="saas-card kpi-card p-5 space-y-3 flex flex-col justify-between">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2.5">
+                                    <div
+                                        class="w-8 h-8 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-500">
+                                        <i data-lucide="code" class="w-4 h-4"></i>
+                                    </div>
+                                    <span
+                                        class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Technical
+                                        Core</span>
+                                </div>
+                                <span id="kpiTechBadge" class="badge badge-primary">High Mastery</span>
+                            </div>
+                            <div>
+                                <span id="kpiTechVal"
+                                    class="text-3xl font-black font-display text-slate-900 dark:text-white kpi-number">85.0%</span>
+                            </div>
+                            <div
+                                class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                                <span>DSA, DBMS, OS</span>
+                                <span class="text-indigo-500 font-semibold font-mono flex items-center gap-1">
+                                    <i data-lucide="zap" class="w-3 h-3"></i> Tier-1 Ready
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- KPI 3: Interview Score -->
+                        <div class="saas-card kpi-card p-5 space-y-3 flex flex-col justify-between">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2.5">
+                                    <div
+                                        class="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500">
+                                        <i data-lucide="mic" class="w-4 h-4"></i>
+                                    </div>
+                                    <span
+                                        class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Interview
+                                        Score</span>
+                                </div>
+                                <span id="kpiMockBadge" class="badge badge-emerald">Passed</span>
+                            </div>
+                            <div>
+                                <span id="kpiMockVal"
+                                    class="text-3xl font-black font-display text-slate-900 dark:text-white kpi-number">78.0/100</span>
+                            </div>
+                            <div
+                                class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                                <span>AI Rubric Evaluation</span>
+                                <span class="text-amber-500 font-semibold font-mono flex items-center gap-1">
+                                    <i data-lucide="sparkles" class="w-3 h-3"></i> Top 15%
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- KPI 4: Readiness Index (Luxury Radial Gauge Dial) -->
+                        <div
+                            class="saas-card kpi-card p-5 space-y-3 relative overflow-hidden flex flex-col justify-between border-indigo-500/30">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <div
+                                        class="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                                        <i data-lucide="award" class="w-4 h-4"></i>
+                                    </div>
+                                    <span
+                                        class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Readiness
+                                        Index</span>
+                                </div>
+                                <span id="kpiReadinessBadge" class="badge badge-emerald">Placement Ready</span>
+                            </div>
+
+                            <div class="flex items-center justify-between pt-1">
+                                <div>
+                                    <span id="kpiReadinessVal"
+                                        class="text-3xl font-black font-display text-indigo-600 dark:text-indigo-400 kpi-number">83.5%</span>
+                                    <div class="text-[10px] text-slate-400 font-mono mt-0.5">Composite Score</div>
+                                </div>
+
+                                <!-- Precision SVG Radial Gauge -->
+                                <div class="radial-gauge-wrapper">
+                                    <svg class="radial-gauge-svg" viewBox="0 0 100 100">
+                                        <defs>
+                                            <linearGradient id="readinessGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stop-color="#10b981" />
+                                                <stop offset="100%" stop-color="#6366f1" />
+                                            </linearGradient>
+                                        </defs>
+                                        <circle class="radial-gauge-bg" cx="50" cy="50" r="38" />
+                                        <circle id="kpiReadinessCircle" class="radial-gauge-meter" cx="50" cy="50"
+                                            r="38" stroke="url(#readinessGrad)" stroke-dasharray="238.76"
+                                            stroke-dashoffset="39.4" />
+                                    </svg>
+                                    <div class="radial-gauge-content">
+                                        <span class="text-[10px] font-black text-indigo-400 font-mono">A+</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div
+                                class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                                <span class="text-emerald-500 font-medium flex items-center gap-1 font-mono">
+                                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> 3/3 Cleared
+                                </span>
+                                <span class="text-purple-400 font-mono font-bold">Grade A+</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3-Round Sequential Pipeline Tracker -->
+                    <div class="saas-card p-6 space-y-4">
+                        <div
+                            class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                                    <i data-lucide="git-commit" class="w-4 h-4 text-indigo-600"></i>
+                                    3-Round Sequential Placement Pipeline
+                                </h3>
+                                <p class="text-xs text-slate-500 mt-0.5">Automated gating architecture: qualify each
+                                    round
+                                    sequentially to unlock the next.</p>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs font-mono">
+                                <span
+                                    class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Round 1
+                                </span>
+                                <span class="text-slate-600 dark:text-slate-400">→</span>
+                                <span
+                                    class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 text-[10px] font-bold">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span> Round 2
+                                    Active
+                                </span>
+                                <span class="text-slate-600 dark:text-slate-400">→</span>
+                                <span
+                                    class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-500/10 text-slate-400 border border-slate-500/20 text-[10px]">
+                                    🔒 Round 3 Gated
+                                </span>
+                            </div>
+                        </div>
+                        <div id="sequentialPipelineTracker" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- Populated dynamically via AppState.placementWorkflow -->
+                        </div>
+                    </div>
+
+                    <!-- Radar Chart & Autonomous Recommendations -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2 saas-card p-6 space-y-4">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-bold text-sm text-slate-900 dark:text-white">Competency Breakdown Radar
+                                </h3>
+                                <span class="text-xs text-slate-400 font-mono">Tier-1 Benchmark: 75%</span>
+                            </div>
+                            <div class="h-64 relative">
+                                <canvas id="competencyChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="saas-card p-6 space-y-4 flex flex-col justify-between">
+                            <div class="space-y-3">
+                                <h3 class="font-bold text-sm text-slate-900 dark:text-white">Autonomous Training
+                                    Recommendations</h3>
+                                <p class="text-xs text-slate-500 leading-relaxed">
+                                    Remediation steps generated from assessment and interview deficit areas (< 70%).
+                                        </p>
+                                        <div id="dashboardRecsContainer" class="space-y-3">
+                                            <!-- Populated dynamically -->
+                                        </div>
+                            </div>
+                            <button onclick="switchTab('practice')"
+                                class="w-full btn-secondary text-xs py-2 mt-4 cursor-pointer">
+                                <span>Open Concept Practice Engine</span>
+                                <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Concept-Wise Placement Preparation Roadmap -->
+                    <div class="saas-card p-6 space-y-4">
+                        <div
+                            class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 gap-2">
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                                    <i data-lucide="map" class="w-4 h-4 text-indigo-600"></i>
+                                    Concept-Wise Placement Preparation Roadmap
+                                </h3>
+                                <p class="text-xs text-slate-500 mt-0.5">Structured technical pillars with concept
+                                    milestones and direct practice access.</p>
+                            </div>
+                            <span class="badge badge-primary font-mono text-[10px]">ROADMAP v2.4</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+                            <!-- Pillar 1: Data Structures & Algorithms -->
+                            <div
+                                class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                        <i data-lucide="binary" class="w-4 h-4 text-indigo-500"></i> DSA Core
+                                    </span>
+                                    <span class="badge badge-emerald text-[9px]">IN PROGRESS</span>
+                                </div>
+                                <div class="space-y-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                    <div class="flex items-center justify-between"><span>Arrays & Strings</span><span
+                                            class="text-emerald-500 font-bold">✓</span></div>
+                                    <div class="flex items-center justify-between"><span>Linked Lists &
+                                            Stacks</span><span class="text-emerald-500 font-bold">✓</span></div>
+                                    <div class="flex items-center justify-between"><span>Binary Trees & BST</span><span
+                                            class="text-amber-500 font-bold">⋯</span></div>
+                                    <div class="flex items-center justify-between"><span>Dynamic Programming</span><span
+                                            class="text-slate-400 font-bold">○</span></div>
+                                </div>
+                                <button onclick="switchTab('practice')"
+                                    class="w-full py-1.5 px-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40 rounded-lg text-[11px] font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition">
+                                    Practice DSA →
+                                </button>
+                            </div>
+
+                            <!-- Pillar 2: Core CS & Systems -->
+                            <div
+                                class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                        <i data-lucide="database" class="w-4 h-4 text-purple-500"></i> Core CS
+                                    </span>
+                                    <span class="badge badge-emerald text-[9px]">IN PROGRESS</span>
+                                </div>
+                                <div class="space-y-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                    <div class="flex items-center justify-between"><span>DBMS & SQL Queries</span><span
+                                            class="text-emerald-500 font-bold">✓</span></div>
+                                    <div class="flex items-center justify-between"><span>OS & Multithreading</span><span
+                                            class="text-amber-500 font-bold">⋯</span></div>
+                                    <div class="flex items-center justify-between"><span>Computer Networks</span><span
+                                            class="text-slate-400 font-bold">○</span></div>
+                                    <div class="flex items-center justify-between"><span>System Design
+                                            Basics</span><span class="text-slate-400 font-bold">○</span></div>
+                                </div>
+                                <button onclick="switchTab('practice')"
+                                    class="w-full py-1.5 px-2 bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800/40 rounded-lg text-[11px] font-bold hover:bg-purple-100 dark:hover:bg-purple-900/60 transition">
+                                    Practice Core CS →
+                                </button>
+                            </div>
+
+                            <!-- Pillar 3: Quantitative Aptitude -->
+                            <div
+                                class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                        <i data-lucide="calculator" class="w-4 h-4 text-emerald-500"></i> Aptitude
+                                    </span>
+                                    <span class="badge badge-emerald text-[9px]">ROUND 1 GATE</span>
+                                </div>
+                                <div class="space-y-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                    <div class="flex items-center justify-between"><span>Percentages &
+                                            Ratios</span><span class="text-emerald-500 font-bold">✓</span></div>
+                                    <div class="flex items-center justify-between"><span>Time, Speed &
+                                            Distance</span><span class="text-emerald-500 font-bold">✓</span></div>
+                                    <div class="flex items-center justify-between"><span>Logical Deductions</span><span
+                                            class="text-amber-500 font-bold">⋯</span></div>
+                                    <div class="flex items-center justify-between"><span>Data Interpretation</span><span
+                                            class="text-slate-400 font-bold">○</span></div>
+                                </div>
+                                <button onclick="switchTab('practice')"
+                                    class="w-full py-1.5 px-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40 rounded-lg text-[11px] font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition">
+                                    Practice Aptitude →
+                                </button>
+                            </div>
+
+                            <!-- Pillar 4: Interview Communication -->
+                            <div
+                                class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                        <i data-lucide="video" class="w-4 h-4 text-indigo-500"></i> Mock Studio
+                                    </span>
+                                    <span class="badge badge-primary text-[9px]">FINAL GATE</span>
+                                </div>
+                                <div class="space-y-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                    <div class="flex items-center justify-between"><span>STAR Methodology</span><span
+                                            class="text-emerald-500 font-bold">✓</span></div>
+                                    <div class="flex items-center justify-between"><span>Pacing (120-150
+                                            WPM)</span><span class="text-emerald-500 font-bold">✓</span></div>
+                                    <div class="flex items-center justify-between"><span>Eye Gaze Stability</span><span
+                                            class="text-amber-500 font-bold">⋯</span></div>
+                                    <div class="flex items-center justify-between"><span>Technical Depth
+                                            Coverage</span><span class="text-amber-500 font-bold">⋯</span></div>
+                                </div>
+                                <button onclick="switchTab('interview')"
+                                    class="w-full py-1.5 px-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40 rounded-lg text-[11px] font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition">
+                                    Launch Mock Studio →
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- ================================================================= -->
+                <!-- VIEW 2: RESUME INTELLIGENCE & ATS QUALITY AUDIT                   -->
+                <!-- ================================================================= -->
+                <div id="view-resume" class="view-panel space-y-6 hidden">
+                    <div class="saas-card p-6 space-y-6">
+                        <div
+                            class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-3">
+                            <div>
+                                <h2 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                                    <i data-lucide="file-text" class="w-5 h-5 text-indigo-600"></i>
+                                    Resume Intelligence & Skill Extraction Engine
+                                </h2>
+                                <p class="text-xs text-slate-500 mt-0.5">Upload candidate resume or paste profile text
+                                    to
+                                    extract skills taxonomy and run comprehensive ATS checks.</p>
+                            </div>
+                            <button onclick="loadSampleResumeText()"
+                                class="btn-secondary py-1.5 px-3.5 text-xs self-start sm:self-auto cursor-pointer">
+                                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-600"></i>
+                                <span>Load Sample Profile</span>
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Left: Input Area -->
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between text-xs">
+                                    <label class="font-bold text-slate-700 dark:text-slate-300">Candidate Resume Plain
+                                        Text:</label>
+                                    <button onclick="clearResumeText()"
+                                        class="text-slate-400 hover:text-rose-500 transition cursor-pointer">Clear</button>
+                                </div>
+                                <textarea id="resumeTextInput" rows="10"
+                                    placeholder="Paste your plain text resume or click 'Load Sample Profile' above..."
+                                    class="w-full p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500 leading-relaxed font-sans shadow-inner"></textarea>
+
+                                <div class="flex flex-wrap items-center gap-3 pt-1">
+                                    <button onclick="runComprehensiveAtsAudit()" id="btnRunAtsAudit"
+                                        class="btn-primary bg-emerald-600 hover:bg-emerald-700 text-xs py-2 px-4 cursor-pointer">
+                                        <i data-lucide="shield-check" class="w-4 h-4 text-emerald-200"></i>
+                                        <span>Run Full ATS Quality Audit</span>
+                                    </button>
+                                    <button onclick="parseResumeLive()"
+                                        class="btn-primary text-xs py-2 px-4 cursor-pointer">
+                                        <i data-lucide="cpu" class="w-4 h-4"></i>
+                                        <span>Extract Skills & Taxonomy</span>
+                                    </button>
+                                    <label id="uploadFileLabel" class="btn-secondary text-xs py-2 px-4 cursor-pointer">
+                                        <i data-lucide="upload" class="w-4 h-4 text-slate-500"></i>
+                                        <span>Upload Resume (.pdf/.txt)</span>
+                                        <input type="file" id="resumeFileInput" accept=".pdf,.txt" class="hidden"
+                                            onchange="handleResumeFileUpload(event)">
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Right: Extracted Skills Taxonomy & Gaps -->
+                            <div class="space-y-4">
+                                <div
+                                    class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                                    <span class="font-bold text-xs text-slate-900 dark:text-white block">Parsed
+                                        Technical
+                                        Skills</span>
+                                    <div id="extractedSkillsContainer">
+                                        <span class="text-xs text-slate-400">Click "Extract Skills" or "Load Sample
+                                            Profile"
+                                            to parse skills.</span>
+                                    </div>
+                                </div>
+                                <div
+                                    class="p-4 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/40 rounded-xl space-y-2 text-xs">
+                                    <strong class="font-bold text-indigo-900 dark:text-indigo-300 block">💡 ATS
+                                        Optimization
+                                        Tips</strong>
+                                    <ul
+                                        class="space-y-1 text-slate-600 dark:text-slate-400 leading-relaxed list-disc pl-4">
+                                        <li>Use standard section headers: <em>Education, Experience, Skills,
+                                                Projects</em>.
+                                        </li>
+                                        <li>Format bullet points using the <strong>Google X-Y-Z formula</strong>:
+                                            <em>"Accomplished [X] as measured by [Y], by doing [Z]"</em>.
+                                        </li>
+                                        <li>Ensure symbols are correctly written: <code>C++</code>, <code>SQL</code>,
+                                            <code>FastAPI</code>, <code>Docker</code>.
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Results Area -->
+                        <div id="resumeAnalysisResults"
+                            class="space-y-4 hidden pt-4 border-t border-slate-200 dark:border-slate-800">
+                            <!-- Populated by renderAtsAuditResults -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================================================================= -->
+                <!-- VIEW 3: CONCEPT PRACTICE & AI CODE DEBUGGING STUDIO              -->
+                <!-- ================================================================= -->
+                <div id="view-practice" class="view-panel space-y-6 hidden">
+                    <div class="saas-card p-6 space-y-6">
+                        <!-- Top Header & Sub-Tab Switcher -->
+                        <div
+                            class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-3">
+                            <div>
+                                <h2 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                                    <i data-lucide="terminal" class="w-5 h-5 text-indigo-600"></i>
+                                    Technical Assessment & Code Review Studio
+                                </h2>
+                                <p class="text-xs text-slate-500 mt-0.5">Domain MCQs, core CS concepts, and FAANG L4
+                                    production code debugging drills.</p>
+                            </div>
+                            <div
+                                class="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs self-start sm:self-auto">
+                                <button id="tabBtnPracticeMcq" onclick="switchPracticeSubTab('mcq')"
+                                    class="px-3.5 py-1.5 rounded-lg font-semibold transition cursor-pointer bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs flex items-center gap-1.5">
+                                    <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+                                    <span>MCQ Assessments</span>
+                                </button>
+                                <button id="tabBtnPracticeDebug" onclick="switchPracticeSubTab('debugging')"
+                                    class="px-3.5 py-1.5 rounded-lg font-semibold transition cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5">
+                                    <i data-lucide="code" class="w-3.5 h-3.5"></i>
+                                    <span>AI Code Debugging</span>
+                                    <span
+                                        class="px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[9px] font-extrabold tracking-wider uppercase">LIVE
+                                        AI</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- CONTAINER A: MCQ Assessments -->
+                        <div id="practiceMcqContainer" class="space-y-4">
+                            <!-- Catalog of Available Tests -->
+                            <div id="practiceCatalogArea" class="space-y-4">
+                                <div id="practiceTestsList"
+                                    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <!-- Populated dynamically via loadConceptPractice -->
+                                </div>
+                            </div>
+
+                            <!-- Interactive Studio Player (Hidden until test launched) -->
+                            <div id="practiceStudioArea" class="hidden">
+                                <!-- Populated dynamically by renderInteractivePracticeQuestion -->
+                            </div>
+                        </div>
+
+                        <!-- CONTAINER B: Live AI Code Debugging Studio -->
+                        <div id="practiceDebuggingContainer" class="space-y-6 hidden">
+                            <!-- Filter & Header -->
+                            <!-- Filter & Header -->
+                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                <div class="flex flex-wrap items-center gap-1.5" id="debuggingLangFilters">
+                                    <button onclick="filterDebuggingChallenges('all')"
+                                        class="lang-filter-btn px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-600 text-white shadow-xs transition cursor-pointer"
+                                        data-lang="all">All <span id="debuggingCountBadge"
+                                            class="ml-1 px-1.5 py-0.2 rounded-full bg-white/20 text-[10px]">19</span></button>
+                                    <button onclick="filterDebuggingChallenges('python')"
+                                        class="lang-filter-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer"
+                                        data-lang="python">Python</button>
+                                    <button onclick="filterDebuggingChallenges('sql')"
+                                        class="lang-filter-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer"
+                                        data-lang="sql">SQL</button>
+                                    <button onclick="filterDebuggingChallenges('javascript')"
+                                        class="lang-filter-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer"
+                                        data-lang="javascript">JavaScript</button>
+                                    <button onclick="filterDebuggingChallenges('java')"
+                                        class="lang-filter-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer"
+                                        data-lang="java">Java</button>
+                                    <button onclick="filterDebuggingChallenges('cpp')"
+                                        class="lang-filter-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer"
+                                        data-lang="cpp">C++</button>
+                                    <button onclick="filterDebuggingChallenges('go')"
+                                        class="lang-filter-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer"
+                                        data-lang="go">Go</button>
+                                </div>
+                                <div class="flex items-center gap-2 self-start sm:self-auto">
+                                    <button onclick="openGenerateChallengeModal()"
+                                        class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 text-white shadow-md hover:from-purple-700 hover:to-indigo-800 transition flex items-center gap-1.5 cursor-pointer">
+                                        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300 animate-pulse"></i>
+                                        <span>AI Generate Custom Drill</span>
+                                    </button>
+                                    <span class="text-xs text-slate-500 hidden lg:flex items-center gap-1.5">
+                                        <i data-lucide="cpu" class="w-3.5 h-3.5 text-purple-500"></i>
+                                        <span>Gemini Live LLM</span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Challenges Grid List -->
+                            <div id="debuggingChallengesList"
+                                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <!-- Populated dynamically via loadDebuggingChallenges -->
+                            </div>
+
+                            <!-- Active Debugging Studio Workspace (Hidden until a challenge is opened) -->
+                            <div id="debuggingWorkspaceArea" class="hidden space-y-6">
+                                <!-- Populated dynamically by openDebuggingChallenge -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================================================================= -->
+                <!-- VIEW 4: AI MOCK INTERVIEW STUDIO                                  -->
+                <!-- ================================================================= -->
+                <div id="view-interview" class="view-panel space-y-6 hidden">
+                    <div id="interviewStudioContainer">
+                        <!-- Populated dynamically by renderInterviewSetupScreen or renderActiveInterviewQuestion -->
+                    </div>
+                </div>
+
+                <!-- ================================================================= -->
+                <!-- VIEW 5: HR INTERVIEW PREPARATION                                  -->
+                <!-- ================================================================= -->
+                <div id="view-hr-interview" class="view-panel space-y-6 hidden">
+                    <div class="saas-card p-6 space-y-6 max-w-4xl mx-auto">
+                        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+                            <h2 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                                <i data-lucide="users" class="w-5 h-5 text-indigo-600"></i>
+                                HR & Behavioral Interview Preparation (STAR Method)
+                            </h2>
+                            <p class="text-xs text-slate-500 mt-0.5">Master situational behavioral scenarios using
+                                Situation, Task, Action, Result methodology with acoustic speech telemetry.</p>
+                        </div>
+
+                        <!-- Scenarios Selection -->
+                        <div class="space-y-3">
+                            <span class="text-xs font-bold text-slate-700 dark:text-slate-300 block">Select Behavioral
+                                Question:</span>
+                            <div id="hrQuestionsList" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <!-- Populated dynamically by initHrInterviewModule -->
+                            </div>
+                        </div>
+
+                        <!-- Active Question & Practice Input -->
+                        <div
+                            class="p-5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Active
+                                        Scenario:</span>
+                                    <span class="badge badge-primary text-[10px]">STAR Evaluation</span>
+                                </div>
+                                <button type="button"
+                                    onclick="speakInterviewerQuestion(document.getElementById('activeHrQuestionDisplay').textContent)"
+                                    class="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer">
+                                    <span>🔊</span>
+                                    <span>Read Question Aloud</span>
+                                </button>
+                            </div>
+                            <p id="activeHrQuestionDisplay"
+                                class="text-xs font-bold text-slate-900 dark:text-white leading-relaxed">
+                                Tell me about a challenging technical setback in a major project, how you diagnosed it,
+                                and
+                                what steps resolved it.
+                            </p>
+                            <textarea id="hrAnswerInput" rows="5"
+                                placeholder="Detail your response highlighting: Situation, Task, Action taken, and measurable Result..."
+                                class="w-full text-xs p-3.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white outline-none focus:border-indigo-500 leading-relaxed font-sans shadow-inner"></textarea>
+
+                            <div class="flex justify-end pt-2">
+                                <button onclick="evaluateHrAnswer()"
+                                    class="btn-primary text-xs py-2 px-5 cursor-pointer">
+                                    <span>Evaluate STAR Response</span>
+                                    <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Evaluation Results -->
+                        <div id="hrEvaluationResultBox" class="hidden">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================================================================= -->
+                <!-- VIEW 6: JOBS & 47 PLACEMENT DRIVES                                -->
+                <!-- ================================================================= -->
+                <div id="view-placement" class="view-panel space-y-6 hidden">
+                    <div class="saas-card p-6 space-y-6">
+                        <div
+                            class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-3">
+                            <div>
+                                <h2 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                                    <i data-lucide="briefcase" class="w-5 h-5 text-indigo-600"></i>
+                                    Jobs & 47 Active Campus Placement Drives
+                                </h2>
+                                <p class="text-xs text-slate-500 mt-0.5">Explore institutional campus recruitment drives
+                                    across Super Dream, Dream, and Core tiers with deterministic eligibility checks.</p>
+                            </div>
+                        </div>
+
+                        <!-- Search and Filters Bar -->
+                        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                            <div class="relative w-full sm:w-80">
+                                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
+                                <input type="text" placeholder="Search by role, company, or skill..."
+                                    oninput="searchPlacementJobs(this.value)"
+                                    class="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white">
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
+                                <button onclick="filterPlacementJobs('all')"
+                                    class="badge badge-neutral hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer py-1.5 px-3">All
+                                    Drives</button>
+                                <button onclick="filterPlacementJobs('super')"
+                                    class="badge badge-primary hover:bg-indigo-100 cursor-pointer py-1.5 px-3">Super
+                                    Dream
+                                    (20+ LPA)</button>
+                                <button onclick="filterPlacementJobs('dream')"
+                                    class="badge badge-emerald hover:bg-emerald-100 cursor-pointer py-1.5 px-3">Dream
+                                    (12-20
+                                    LPA)</button>
+                                <button onclick="filterPlacementJobs('core')"
+                                    class="badge badge-amber hover:bg-amber-100 cursor-pointer py-1.5 px-3">Core &
+                                    FinTech</button>
+                            </div>
+                        </div>
+
+                        <!-- Placement Jobs List Container -->
+                        <div id="placementJobsListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Populated dynamically via loadPlacementDrives -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================================================================= -->
+                <!-- VIEW 7: FULL-SCREEN AI CAREER MENTOR (MITRA) WORKSPACE             -->
+                <!-- ================================================================= -->
+                <div id="view-mentor" class="view-panel space-y-6 hidden">
+                    <div class="saas-card flex flex-col h-[75vh] max-w-4xl mx-auto overflow-hidden">
+                        <!-- Mentor Workspace Header -->
+                        <div
+                            class="p-4 bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-950 text-white flex items-center justify-between border-b border-purple-900/50">
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="w-9 h-9 rounded-xl bg-purple-600 flex items-center justify-center text-white shadow-md text-sm">
+                                    🤖
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h3 class="font-bold text-sm text-white">Mitra AI Career Mentor</h3>
+                                        <span
+                                            class="badge bg-purple-800 text-purple-200 border-purple-600/50 text-[9px] font-mono">GEMINI
+                                            LIVE & OFFLINE ENGINE</span>
+                                    </div>
+                                    <p class="text-[11px] text-purple-300">Dedicated placement doubt assistance &
+                                        interview
+                                        coaching</p>
+                                </div>
+                            </div>
+                            <button onclick="clearMentorWorkspace()" title="Clear Chat"
+                                class="p-1.5 text-purple-300 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+
+                        <!-- Quick Suggestions Chips Bar -->
+                        <div
+                            class="px-4 py-2 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 overflow-x-auto text-[11px]">
+                            <button
+                                onclick="sendQuickMentorPrompt('How do I prepare for Round 1 Aptitude and speed math formulas?')"
+                                class="badge badge-neutral hover:bg-purple-100 hover:text-purple-700 cursor-pointer py-1 px-3 whitespace-nowrap">
+                                📝 Round 1 Aptitude Tips
+                            </button>
+                            <button
+                                onclick="sendQuickMentorPrompt('Explain the 3-Round Sequential Placement Pipeline and how gating works.')"
+                                class="badge badge-neutral hover:bg-purple-100 hover:text-purple-700 cursor-pointer py-1 px-3 whitespace-nowrap">
+                                🔄 3-Round Pipeline
+                            </button>
+                            <button
+                                onclick="sendQuickMentorPrompt('What are proven breathing techniques to manage placement stress and anxiety?')"
+                                class="badge badge-neutral hover:bg-purple-100 hover:text-purple-700 cursor-pointer py-1 px-3 whitespace-nowrap">
+                                💖 Stress Management
+                            </button>
+                            <button
+                                onclick="sendQuickMentorPrompt('How do I optimize my resume for ATS scoring using the Google X-Y-Z formula?')"
+                                class="badge badge-neutral hover:bg-purple-100 hover:text-purple-700 cursor-pointer py-1 px-3 whitespace-nowrap">
+                                📄 Resume ATS Tips
+                            </button>
+                        </div>
+
+                        <!-- Chat Messages Stream -->
+                        <div id="mentorWorkspaceMessages"
+                            class="flex-1 p-5 overflow-y-auto space-y-4 bg-slate-50/50 dark:bg-slate-950/50">
+                            <div
+                                class="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs space-y-2 text-slate-700 dark:text-slate-300 shadow-2xs">
+                                <h4 class="font-bold text-indigo-950 dark:text-indigo-300 text-sm">Welcome to Mitra AI
+                                    Career Mentor!</h4>
+                                <p class="leading-relaxed">I am synchronized with your academic profile, resume skills,
+                                    and
+                                    active placement drives. Ask me any question, for example:</p>
+                                <ul class="list-disc pl-4 space-y-1 text-slate-600 dark:text-slate-400">
+                                    <li><em>"What are the most common Python and SQL interview questions?"</em></li>
+                                    <li><em>"How can I answer 'Tell me about yourself' effectively?"</em></li>
+                                    <li><em>"Am I eligible for Google, Microsoft, and Cisco drives?"</em></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Input Form -->
+                        <div class="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+                            <form id="mentorWorkspaceForm" class="flex items-center gap-2">
+                                <input type="text" id="mentorWorkspaceInput" placeholder="Ask your doubt or concern..."
+                                    autocomplete="off"
+                                    class="flex-1 text-xs p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-slate-900 dark:text-white font-sans">
+                                <button type="submit"
+                                    class="btn-primary py-2.5 px-4 text-xs cursor-pointer shadow-none">
+                                    <span>Send</span>
+                                    <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================================================================= -->
+                <!-- VIEW 8: INTERVIEW HISTORY & DOSSIERS                              -->
+                <!-- ================================================================= -->
+                <div id="view-history" class="view-panel space-y-6 hidden">
+                    <div class="saas-card p-6 space-y-6">
+                        <div
+                            class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-3">
+                            <div>
+                                <h2 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                                    <i data-lucide="history" class="w-5 h-5 text-indigo-600"></i>
+                                    Interview History & Performance Dossiers
+                                </h2>
+                                <p class="text-xs text-slate-500 mt-0.5">Comprehensive audit trail of past mock
+                                    interviews,
+                                    transcripts, speech fluency, and official PDF downloads.</p>
+                            </div>
+                            <button onclick="downloadMyReport()"
+                                class="btn-secondary py-1.5 px-3.5 text-xs self-start sm:self-auto cursor-pointer">
+                                <i data-lucide="download" class="w-3.5 h-3.5 text-indigo-600"></i>
+                                <span>Export PDF Placement Dossier</span>
+                            </button>
+                        </div>
+
+                        <!-- History Table -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead>
+                                    <tr
+                                        class="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-slate-400 uppercase font-mono text-[10px]">
+                                        <th class="p-3">Interview Session</th>
+                                        <th class="p-3">Date</th>
+                                        <th class="p-3">Composite Score</th>
+                                        <th class="p-3">Tech / Comm</th>
+                                        <th class="p-3">Status</th>
+                                        <th class="p-3 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="interviewHistoryTableBody">
+                                    <!-- Populated dynamically by loadInterviewHistory -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================================================================= -->
+                <!-- VIEW 9: PROFILE & SETTINGS                                        -->
+                <!-- ================================================================= -->
+                <div id="view-profile" class="view-panel space-y-6 hidden">
+                    <div class="saas-card p-6 space-y-6 max-w-2xl mx-auto">
+                        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+                            <h2 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                                <i data-lucide="user-cog" class="w-5 h-5 text-indigo-600"></i>
+                                Student Academic Profile & Settings
+                            </h2>
+                            <p class="text-xs text-slate-500 mt-0.5">Manage your personal credentials, social profiles,
+                                and
+                                portal appearance preferences.</p>
+                        </div>
+
+                        <form onsubmit="saveStudentProfile(event)" class="space-y-4 text-xs">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Roll
+                                        Number:</label>
+                                    <input type="text" id="profileRollInput" required
+                                        class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white font-mono">
+                                </div>
+                                <div>
+                                    <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Current
+                                        CGPA:</label>
+                                    <input type="number" step="0.01" id="profileCgpaInput" required
+                                        class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white font-mono">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Branch /
+                                        Discipline:</label>
+                                    <input type="text" id="profileBranchInput" required
+                                        class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label
+                                        class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Semester:</label>
+                                    <input type="number" id="profileSemesterInput" required
+                                        class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white font-mono">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Institution /
+                                    College:</label>
+                                <input type="text" id="profileCollegeInput" required
+                                    class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white">
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">GitHub
+                                        Profile
+                                        URL:</label>
+                                    <input type="url" id="profileGithubInput" placeholder="https://github.com/username"
+                                        class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">LinkedIn
+                                        Profile
+                                        URL:</label>
+                                    <input type="url" id="profileLinkedinInput"
+                                        placeholder="https://linkedin.com/in/username"
+                                        class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Professional
+                                    Bio:</label>
+                                <textarea id="profileBioInput" rows="3" placeholder="Brief technical summary..."
+                                    class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white leading-relaxed font-sans"></textarea>
+                            </div>
+
+                            <div
+                                class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                                <button type="button" onclick="logoutUser()"
+                                    class="text-xs text-rose-500 hover:text-rose-700 font-bold cursor-pointer">
+                                    Sign Out of Portal
+                                </button>
+                                <button type="submit" class="btn-primary py-2 px-6 text-xs cursor-pointer shadow-md">
+                                    Save Profile Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- ================================================================= -->
+                <!-- VIEW 10: ADMIN OVERVIEW                                           -->
+                <!-- ================================================================= -->
+                <div id="view-admin" class="view-panel space-y-6 hidden">
+                    <div class="saas-card p-6 space-y-6">
+                        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+                            <h2 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                                <i data-lucide="shield-check" class="w-5 h-5 text-indigo-600"></i>
+                                Placement Cell Administrative Console
+                            </h2>
+                            <p class="text-xs text-slate-500 mt-0.5">Aggregate placement analytics, corporate drive
+                                participation, and candidate support counters.</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+                            <div
+                                class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                                <span class="text-xs text-slate-400 block font-medium">Total Students</span>
+                                <span id="adminTotalStudents"
+                                    class="text-2xl font-black text-slate-900 dark:text-white">0</span>
+                            </div>
+                            <div
+                                class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                                <span class="text-xs text-slate-400 block font-medium">Companies</span>
+                                <span id="adminTotalCompanies"
+                                    class="text-2xl font-black text-slate-900 dark:text-white">0</span>
+                            </div>
+                            <div
+                                class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                                <span class="text-xs text-slate-400 block font-medium">Job Drives</span>
+                                <span id="adminTotalJobs"
+                                    class="text-2xl font-black text-indigo-600 dark:text-indigo-400">0</span>
+                            </div>
+                            <div
+                                class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                                <span class="text-xs text-slate-400 block font-medium">Applications</span>
+                                <span id="adminTotalApplications"
+                                    class="text-2xl font-black text-slate-900 dark:text-white">0</span>
+                            </div>
+                            <div
+                                class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                                <span class="text-xs text-slate-400 block font-medium">Interventions</span>
+                                <span id="adminInterventionsNeeded" class="text-2xl font-black text-amber-500">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================================================================= -->
+                <!-- VIEW 11: ADMIN CANDIDATE MANAGEMENT                               -->
+                <!-- ================================================================= -->
+                <div id="view-admin-candidates" class="view-panel space-y-6 hidden">
+                    <div class="saas-card p-6 space-y-6">
+                        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+                            <h2 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                                <i data-lucide="users-2" class="w-5 h-5 text-indigo-600"></i>
+                                Candidate Placement Management Roster
+                            </h2>
+                            <p class="text-xs text-slate-500 mt-0.5">Search and inspect student credentials, CGPAs, and
+                                download placement dossiers.</p>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead>
+                                    <tr
+                                        class="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-slate-400 uppercase font-mono text-[10px]">
+                                        <th class="p-3">Candidate</th>
+                                        <th class="p-3">Branch & Semester</th>
+                                        <th class="p-3">CGPA</th>
+                                        <th class="p-3">Email</th>
+                                        <th class="p-3 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="adminCandidatesTableBody">
+                                    <!-- Populated dynamically by loadAdminData -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================================================================= -->
+                <!-- VIEW 12: SYSTEM & MODEL DIAGNOSTICS                               -->
+                <!-- ================================================================= -->
+                <div id="view-admin-diagnostics" class="view-panel space-y-6 hidden">
+                    <div class="saas-card p-6 space-y-6 max-w-2xl mx-auto">
+                        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+                            <h2 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                                <i data-lucide="activity" class="w-5 h-5 text-indigo-600"></i>
+                                System & AI Engine Diagnostics
+                            </h2>
+                            <p class="text-xs text-slate-500 mt-0.5">Real-time health verification for local databases,
+                                LLM
+                                engines, and vision proctoring services.</p>
+                        </div>
+
+                        <div class="space-y-3 text-xs">
+                            <div
+                                class="p-3.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                <span class="font-medium text-slate-700 dark:text-slate-300">Database Engine:</span>
+                                <span id="diagDbStatus"><span class="badge badge-emerald">Online (SQLite)</span></span>
+                            </div>
+                            <div
+                                class="p-3.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                <span class="font-medium text-slate-700 dark:text-slate-300">Gemini LLM / Heuristic
+                                    Engine:</span>
+                                <span id="diagGeminiStatus"><span class="badge badge-emerald">Dual-Engine
+                                        Active</span></span>
+                            </div>
+                            <div
+                                class="p-3.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                <span class="font-medium text-slate-700 dark:text-slate-300">Computer Vision &
+                                    Proctoring:</span>
+                                <span id="diagVisionStatus"><span class="badge badge-emerald">MediaPipe & YOLOv8
+                                        Ready</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Audio & Compatibility Container -->
+                <div id="audioMeterContainer" class="hidden">
+                    <!-- Compatibility anchors: startCamAndMic, toggleMicrophone, raiseQuestionsFromResume -->
+                </div>
+
+            </main>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- FIRST-TIME STUDENT ONBOARDING MODAL WIZARD                                -->
+        <!-- ========================================================================= -->
+        <div id="onboardingModal" class="modal-backdrop">
+            <div
+                class="modal-card p-6 sm:p-8 space-y-6 max-w-2xl mx-auto my-auto border border-indigo-500/20 shadow-2xl">
+                <!-- Modal Header & Stepper Indicator -->
+                <div class="space-y-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <div
+                                class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-sm">
+                                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                                    Student Candidate Onboarding
+                                </h3>
+                                <span id="onboardingStepSub" class="text-[11px] text-slate-500 block">Step 1 of 4 •
+                                    Academic
+                                    & Placement Profile</span>
+                            </div>
+                        </div>
+                        <button onclick="closeOnboardingModal()"
+                            class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs px-2.5 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                            Skip Setup ✕
+                        </button>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div id="onboardingProgressBar" class="h-full bg-indigo-600 transition-all duration-300"
+                            style="width: 25%;"></div>
+                    </div>
+
+                    <!-- Step Labels -->
+                    <div class="grid grid-cols-4 text-center text-[10px] font-bold text-slate-400">
+                        <span id="stepLabel1" class="text-indigo-600 dark:text-indigo-400">1. Profile</span>
+                        <span id="stepLabel2">2. Resume</span>
+                        <span id="stepLabel3">3. Target Role</span>
+                        <span id="stepLabel4">4. Ready!</span>
+                    </div>
+                </div>
+
+                <!-- STEP 1: Academic Profile Details -->
+                <div id="onboardingStep1" class="space-y-4 text-xs">
+                    <p class="text-slate-600 dark:text-slate-400 text-xs leading-relaxed">
+                        Verify your academic and institutional credentials. These details are used for campus placement
+                        eligibility checks and tier cutoffs.
+                    </p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Full Name</label>
+                            <input type="text" id="obFullName"
+                                class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">University Roll
+                                No. /
+                                USN</label>
+                            <input type="text" id="obRollNumber"
+                                class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white font-mono uppercase">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">College /
+                                University</label>
+                            <input type="text" id="obCollege"
+                                class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Branch /
+                                Discipline</label>
+                            <input type="text" id="obBranch"
+                                class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        <div>
+                            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Current
+                                Semester</label>
+                            <input type="number" id="obSemester" min="1" max="8"
+                                class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white font-mono">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Aggregate
+                                CGPA</label>
+                            <input type="number" step="0.01" min="0" max="10" id="obCgpa"
+                                class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white font-mono">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone
+                                Number</label>
+                            <input type="tel" id="obPhone" placeholder="+91 98765 43210"
+                                class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white">
+                        </div>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+                        <button type="button" onclick="saveOnboardingProfile()" id="btnObSaveProfile"
+                            class="btn-primary py-2.5 px-6 text-xs flex items-center gap-2 cursor-pointer shadow-md">
+                            <span>Save & Next: Upload Resume</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 2: Resume Upload & AI Parsing -->
+                <div id="onboardingStep2" class="space-y-4 text-xs hidden">
+                    <p class="text-slate-600 dark:text-slate-400 text-xs leading-relaxed">
+                        Upload your resume (PDF or TXT) to automatically extract technical skills, save them to your
+                        permanent profile, and seed your AI Mock Interview questions.
+                    </p>
+
+                    <div
+                        class="p-6 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl text-center space-y-3 bg-slate-50 dark:bg-slate-900/40">
+                        <div
+                            class="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 mx-auto flex items-center justify-center">
+                            <i data-lucide="file-up" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <span class="font-bold text-slate-800 dark:text-slate-200 block">Select PDF or Text
+                                Resume</span>
+                            <span class="text-[11px] text-slate-400">PDF or TXT up to 10MB</span>
+                        </div>
+                        <input type="file" id="obResumeFileInput" accept=".pdf,.txt" class="hidden"
+                            onchange="handleObFileSelected(event)">
+                        <button type="button" onclick="document.getElementById('obResumeFileInput').click()"
+                            class="btn-secondary py-2 px-4 text-xs inline-flex items-center gap-1.5 cursor-pointer">
+                            <i data-lucide="folder-open" class="w-3.5 h-3.5"></i>
+                            <span>Browse Resume File</span>
+                        </button>
+                        <div id="obSelectedFileName"
+                            class="text-[11px] text-indigo-600 dark:text-indigo-400 font-mono font-medium"></div>
+                    </div>
+
+                    <!-- Parsed Skills Display Container -->
+                    <div id="obSkillsContainer"
+                        class="hidden space-y-2 p-3.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                        <span class="font-bold text-[11px] text-slate-700 dark:text-slate-300 block">Extracted &
+                            Verified
+                            Skills:</span>
+                        <div id="obSkillsBadges" class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto"></div>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                        <button type="button" onclick="skipOnboardingStep(2)"
+                            class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-medium cursor-pointer">
+                            Skip Resume for Now →
+                        </button>
+                        <button type="button" onclick="uploadOnboardingResume()" id="btnObUploadResume"
+                            class="btn-primary py-2.5 px-6 text-xs flex items-center gap-2 cursor-pointer shadow-md">
+                            <span>Analyze & Continue</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 3: Target Placement Role -->
+                <div id="onboardingStep3" class="space-y-4 text-xs hidden">
+                    <p class="text-slate-600 dark:text-slate-400 text-xs leading-relaxed">
+                        Select your primary placement specialization. Our AI recommendation engine will tailor mock
+                        interviews and roadmaps accordingly.
+                    </p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="obRoleCardsContainer">
+                        <div onclick="selectTargetRoleCard(this, 'Full Stack Software Engineer')"
+                            class="ob-role-card p-3.5 rounded-xl border-2 border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20 cursor-pointer transition">
+                            <div class="flex items-center gap-2 font-bold text-indigo-600 dark:text-indigo-400 mb-1">
+                                <i data-lucide="code" class="w-4 h-4"></i>
+                                <span>Full Stack Engineer</span>
+                            </div>
+                            <span class="text-[11px] text-slate-500 block">React, Node.js, Python, FastAPI, SQL,
+                                Cloud</span>
+                        </div>
+
+                        <div onclick="selectTargetRoleCard(this, 'AI / Machine Learning Engineer')"
+                            class="ob-role-card p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 bg-white dark:bg-slate-900 cursor-pointer transition">
+                            <div class="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-200 mb-1">
+                                <i data-lucide="cpu" class="w-4 h-4"></i>
+                                <span>AI & ML Engineer</span>
+                            </div>
+                            <span class="text-[11px] text-slate-500 block">Python, PyTorch, LLMs, NLP, Vector DBs, ML
+                                Pipelines</span>
+                        </div>
+
+                        <div onclick="selectTargetRoleCard(this, 'Cloud & DevOps Engineer')"
+                            class="ob-role-card p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 bg-white dark:bg-slate-900 cursor-pointer transition">
+                            <div class="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-200 mb-1">
+                                <i data-lucide="cloud" class="w-4 h-4"></i>
+                                <span>Cloud & DevOps</span>
+                            </div>
+                            <span class="text-[11px] text-slate-500 block">Docker, Kubernetes, AWS, CI/CD, Linux,
+                                Terraform</span>
+                        </div>
+
+                        <div onclick="selectTargetRoleCard(this, 'Core Software & Systems Engineer')"
+                            class="ob-role-card p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 bg-white dark:bg-slate-900 cursor-pointer transition">
+                            <div class="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-200 mb-1">
+                                <i data-lucide="terminal" class="w-4 h-4"></i>
+                                <span>Core Systems & Data</span>
+                            </div>
+                            <span class="text-[11px] text-slate-500 block">C++, Java, DSA, OS, DBMS, Low-Level
+                                Design</span>
+                        </div>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                        <button type="button" onclick="skipOnboardingStep(3)"
+                            class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-medium cursor-pointer">
+                            Skip for Now →
+                        </button>
+                        <button type="button" onclick="saveOnboardingTargetRole()"
+                            class="btn-primary py-2.5 px-6 text-xs flex items-center gap-2 cursor-pointer shadow-md">
+                            <span>Save & Complete Onboarding</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 4: Ready to Launch -->
+                <div id="onboardingStep4" class="space-y-5 text-center text-xs hidden py-2">
+                    <div
+                        class="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 mx-auto flex items-center justify-center">
+                        <i data-lucide="check-check" class="w-7 h-7"></i>
+                    </div>
+
+                    <div class="space-y-1">
+                        <h4 class="text-base font-black text-slate-900 dark:text-white">
+                            Onboarding Complete! Candidate Profile Active
+                        </h4>
+                        <p class="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                            Your profile is verified and synchronized with campus placement eligibility rules. How would
+                            you
+                            like to begin?
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+                        <button onclick="finishOnboarding('interview')"
+                            class="p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/20 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/40 transition flex items-center gap-3 group cursor-pointer">
+                            <div class="p-2 rounded-lg bg-indigo-600 text-white shrink-0">
+                                <i data-lucide="video" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <span
+                                    class="font-bold text-slate-900 dark:text-white block group-hover:text-indigo-600 dark:group-hover:text-indigo-400">AI
+                                    Mock Interview</span>
+                                <span class="text-[11px] text-slate-400">Simulate questions with acoustic
+                                    telemetry</span>
+                            </div>
+                        </button>
+
+                        <button onclick="finishOnboarding('practice')"
+                            class="p-3.5 rounded-xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/40 dark:bg-purple-950/20 hover:bg-purple-100/50 dark:hover:bg-purple-900/40 transition flex items-center gap-3 group cursor-pointer">
+                            <div class="p-2 rounded-lg bg-purple-600 text-white shrink-0">
+                                <i data-lucide="book-open" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <span
+                                    class="font-bold text-slate-900 dark:text-white block group-hover:text-purple-600 dark:group-hover:text-purple-400">Concept
+                                    Practice</span>
+                                <span class="text-[11px] text-slate-400">Test aptitude, programming, and core
+                                    subjects</span>
+                            </div>
+                        </button>
+
+                        <button onclick="finishOnboarding('placement')"
+                            class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition flex items-center gap-3 group cursor-pointer">
+                            <div class="p-2 rounded-lg bg-emerald-600 text-white shrink-0">
+                                <i data-lucide="briefcase" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <span
+                                    class="font-bold text-slate-900 dark:text-white block group-hover:text-emerald-600 dark:group-hover:text-emerald-400">Explore
+                                    47 Drives</span>
+                                <span class="text-[11px] text-slate-400">Check eligibility & apply for campus
+                                    recruitment</span>
+                            </div>
+                        </button>
+
+                        <button onclick="finishOnboarding('dashboard')"
+                            class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition flex items-center gap-3 group cursor-pointer">
+                            <div class="p-2 rounded-lg bg-slate-700 text-white shrink-0">
+                                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <span
+                                    class="font-bold text-slate-900 dark:text-white block group-hover:text-indigo-600 dark:group-hover:text-indigo-400">Executive
+                                    Dashboard</span>
+                                <span class="text-[11px] text-slate-400">View KPIs, recommendations, and pipeline
+                                    status</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ========================================================================= -->
+        <!-- AI CHALLENGE GENERATOR MODAL (GEMINI LIVE)                                -->
+        <!-- ========================================================================= -->
+        <div id="aiGenerateChallengeModal"
+            class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 animate-fadeIn">
+            <div
+                class="bg-white dark:bg-slate-900 border border-indigo-500/30 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 relative">
+                <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3.5">
+                    <div class="flex items-center gap-2.5">
+                        <div
+                            class="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-purple-500/20">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-amber-300"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-extrabold text-sm text-slate-900 dark:text-white">Generate Custom AI Drill
+                            </h3>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Powered by Google Gemini Live LLM
+                            </p>
+                        </div>
+                    </div>
+                    <button onclick="closeGenerateChallengeModal()"
+                        class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-4 text-xs">
+                    <div>
+                        <label class="font-bold text-slate-700 dark:text-slate-300 block mb-1">Target Language /
+                            Technology:</label>
+                        <select id="genChallengeLang"
+                            class="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium focus:outline-none focus:border-indigo-500">
+                            <option value="python">Python (Django / FastApi / Asyncio / Data)</option>
+                            <option value="javascript">JavaScript / TypeScript (Node.js / React)</option>
+                            <option value="java">Java (Spring Boot / JVM / Multithreading)</option>
+                            <option value="cpp">C++ (STL / Memory / RAII / Pointers)</option>
+                            <option value="sql">SQL (PostgreSQL / MySQL / Queries & Deadlocks)</option>
+                            <option value="go">Go / Golang (Goroutines / Channels / Concurrency)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="font-bold text-slate-700 dark:text-slate-300 block mb-1">Target
+                            Difficulty:</label>
+                        <select id="genChallengeDiff"
+                            class="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium focus:outline-none focus:border-indigo-500">
+                            <option value="Medium">Medium (Standard FAANG L4 Round)</option>
+                            <option value="Hard">Hard (Staff / Senior L5 Concurrency & Scale)</option>
+                            <option value="Easy">Easy (Core Foundations & Syntax Trap)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="font-bold text-slate-700 dark:text-slate-300">Custom Focus / Technology
+                                (Optional):</label>
+                            <span class="text-[10px] text-slate-400">e.g. Redis, Kafka, Race Condition</span>
+                        </div>
+                        <input type="text" id="genChallengeTopic"
+                            placeholder="e.g. Distributed lock expiration, Docker memory leak, Async generator..."
+                            class="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500" />
+                    </div>
+
+                    <!-- Inspiration quick pills -->
+                    <div class="space-y-1.5 pt-1">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Popular
+                            Interview
+                            Themes:</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button type="button" onclick="setGenTopic('Redis Distributed Lock Race')"
+                                class="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-600 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 cursor-pointer">Redis
+                                Locks</button>
+                            <button type="button" onclick="setGenTopic('Database Connection Pool Leak')"
+                                class="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-600 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 cursor-pointer">Connection
+                                Leak</button>
+                            <button type="button" onclick="setGenTopic('JWT Token Signature Verification Bypass')"
+                                class="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-600 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 cursor-pointer">JWT
+                                Security</button>
+                            <button type="button" onclick="setGenTopic('Kafka Consumer Group Rebalance Loop')"
+                                class="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-600 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 cursor-pointer">Kafka
+                                Rebalance</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5">
+                    <button type="button" onclick="closeGenerateChallengeModal()"
+                        class="btn-secondary py-2 px-3.5 text-xs cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="button" id="btnSubmitGenChallenge" onclick="submitGenerateChallenge()"
+                        class="btn-primary py-2 px-4 text-xs flex items-center gap-1.5 cursor-pointer shadow-md bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i>
+                        <span>Generate Drill with Gemini</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Application JavaScript Client -->
+        <script src="/static/app.js"></script>
+
+        <!-- Embedded Mitra Floating Chatbot Widget -->
+        <script src="/static/chatbot.js"></script>
+    </body>
+
+    </html>

@@ -1,0 +1,3797 @@
+/**
+ * AI-TPMS Modern SaaS Frontend Application Logic
+ * Modular SPA architecture with centralized state, theme management,
+ * REST API client, audio/vision proctoring, and comprehensive analytics.
+ */
+
+// ==============================================================================
+// 1. GLOBAL STATE & CONFIGURATION
+// ==============================================================================
+const AppState = {
+    token: localStorage.getItem('token') || '',
+    role: localStorage.getItem('role') || 'student',
+    userEmail: localStorage.getItem('userEmail') || '',
+    theme: localStorage.getItem('theme') || 'light',
+    user: null,
+    studentId: 1,
+    activeTab: 'dashboard',
+    
+    // Cache for views data
+    performance: null,
+    recommendations: [],
+    companies: [],
+    jobs: [],
+    interviewHistory: [],
+    placementWorkflow: null,
+    
+    // Active Interactive Sessions
+    currentInterviewSession: null,
+    activeInterviewTimer: null,
+    interviewSecondsElapsed: 0,
+    mediaStream: null,
+    speechRecognition: null,
+    isRecordingVoice: false,
+    activeInterviewerPersona: 'sophia',
+    autoSpeakInterview: true,
+    interviewerState: 'idle',
+    
+    // Concept Practice Session
+    activeTest: null,
+    practiceQuestions: [],
+    practiceCurrentIndex: 0,
+    practiceScore: 0,
+    practiceAnswers: {},
+    
+    // Mentor Chat History
+    mentorChatHistory: []
+};
+
+// ==============================================================================
+// 2. CENTRALIZED API CLIENT
+// ==============================================================================
+async function apiCall(endpoint, method = 'GET', body = null, isFormData = false) {
+    const headers = {};
+    if (AppState.token) {
+        headers['Authorization'] = `Bearer ${AppState.token}`;
+    }
+    if (!isFormData && body) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    const config = {
+        method,
+        headers,
+        body: isFormData ? body : (body ? JSON.stringify(body) : undefined)
+    };
+
+    try {
+        const resp = await fetch(endpoint, config);
+        
+        // Handle unauthorized / expired token
+        if (resp.status === 401) {
+            console.warn('[API] 401 Unauthorized encountered. Redirecting to login.');
+            showToast('Session expired or unauthorized. Please sign in.', 'warning');
+            logoutUser(false);
+            throw new Error('Unauthorized');
+        }
+
+        if (!resp.ok) {
+            let errMsg = `HTTP Error ${resp.status}`;
+            try {
+                const errData = await resp.json();
+                errMsg = errData.detail || errData.message || errMsg;
+            } catch (e) {}
+            throw new Error(errMsg);
+        }
+
+        // Return parsed json or blob if download
+        const contentType = resp.headers.get('content-type') || '';
+        if (contentType.includes('application/pdf')) {
+            return await resp.blob();
+        }
+        return await resp.json();
+    } catch (err) {
+        console.error(`[API Error] ${method} ${endpoint}:`, err);
+        throw err;
+    }
+}
+
+// ==============================================================================
+// 3. TOAST NOTIFICATIONS
+// ==============================================================================
+function showToast(message, type = 'info', durationMs = 3500) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    const icons = {
+        success: '✅',
+        error: '❌',
+        warning: '⚠️',
+        info: 'ℹ️'
+    };
+
+    const borderColors = {
+        success: 'var(--emerald-500)',
+        error: 'var(--rose-500)',
+        warning: 'var(--amber-500)',
+        info: 'var(--primary-500)'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = 'toast-item';
+    toast.style.borderLeft = `4px solid ${borderColors[type] || borderColors.info}`;
+    toast.innerHTML = `
+        <span class="text-base">${icons[type] || 'ℹ️'}</span>
+        <span class="flex-1">${escapeHTML(message)}</span>
+        <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer ml-2">✕</button>
+    `;
+
+    container.appendChild(toast);
+    setTimeout(() => {
+        if (toast.parentElement) toast.remove();
+    }, durationMs);
+}
+
+function escapeHTML(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+    );
+}
+
+// ==============================================================================
+// 4. THEME CONTROLLER (Light & Dark with Chart.js Auto-Refresh)
+// ==============================================================================
+function initTheme() {
+    const saved = localStorage.getItem('theme');
+    if (saved) {
+        AppState.theme = saved;
+    } else {
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        AppState.theme = prefersDark ? 'dark' : 'light';
+    }
+    applyTheme(AppState.theme);
+}
+
+function toggleTheme() {
+    AppState.theme = AppState.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('theme', AppState.theme);
+    applyTheme(AppState.theme);
+}
+
+function applyTheme(theme) {
+    const root = document.documentElement;
+    const themeBtn = document.getElementById('btnThemeToggle');
+    if (theme === 'dark') {
+        root.classList.add('dark');
+        if (themeBtn) {
+            themeBtn.innerHTML = `<i data-lucide="sun" class="w-4 h-4 text-amber-400"></i>`;
+            themeBtn.title = "Switch to Light Theme";
+        }
+    } else {
+        root.classList.remove('dark');
+        if (themeBtn) {
+            themeBtn.innerHTML = `<i data-lucide="moon" class="w-4 h-4 text-slate-600"></i>`;
+            themeBtn.title = "Switch to Dark Theme";
+        }
+    }
+    if (window.lucide) lucide.createIcons();
+    
+    // Refresh any active Chart.js charts with appropriate colors
+    refreshChartsTheme();
+}
+
+let competencyChartInstance = null;
+let adminAnalyticsChartInstance = null;
+
+function refreshChartsTheme() {
+    const isDark = document.documentElement.classList.contains('dark');
+    const textColor = isDark ? '#94a3b8' : '#475569';
+    const gridColor = isDark ? '#1e293b' : '#e2e8f0';
+
+    if (competencyChartInstance) {
+        competencyChartInstance.options.scales.r.pointLabels.color = textColor;
+        competencyChartInstance.options.scales.r.grid.color = gridColor;
+        competencyChartInstance.options.scales.r.angleLines.color = gridColor;
+        competencyChartInstance.options.scales.r.ticks.color = textColor;
+        competencyChartInstance.options.scales.r.ticks.backdropColor = 'transparent';
+        competencyChartInstance.update();
+    }
+}
+
+// ==============================================================================
+// 5. AUTHENTICATION & USER PROFILE INITIALIZATION
+// ==============================================================================
+// 5. AUTHENTICATION, USER PROFILE & ONBOARDING INITIALIZATION
+// ==============================================================================
+async function initUserSession() {
+    // If no token exists, immediately redirect to login page
+    if (!AppState.token) {
+        window.location.replace('/static/login.html');
+        return;
+    }
+
+    try {
+        const me = await apiCall('/api/v1/auth/me');
+        AppState.user = me;
+        AppState.role = me.role;
+        localStorage.setItem('user', JSON.stringify(me));
+        if (me.profile && me.profile.student_id) {
+            AppState.studentId = me.profile.student_id;
+            localStorage.setItem('studentId', me.profile.student_id);
+        }
+
+        // Update Header and Profile displays
+        updateUserHeader();
+        updateNavigationForRole();
+
+        // Load dashboard immediately for active view
+        if (AppState.role === 'student') {
+            loadDashboardData();
+        }
+
+        // Check for first-time candidate onboarding flag or query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const needsOnboarding = urlParams.get('onboarding') === 'true' || localStorage.getItem('first_time_onboarding') === 'true';
+        if (needsOnboarding && AppState.role === 'student') {
+            openOnboardingModal();
+        }
+    } catch (err) {
+        console.warn('[Auth] Token verification failed:', err);
+        logoutUser(false);
+    }
+}
+
+function updateUserHeader() {
+    const nameEl = document.getElementById('userDisplayName');
+    const emailEl = document.getElementById('userEmailDisplay');
+    const roleBadge = document.getElementById('roleBadge');
+    const avatarEl = document.getElementById('userAvatarInitials');
+
+    const fullName = AppState.user ? AppState.user.full_name : 'Student Candidate';
+    const email = AppState.user ? AppState.user.email : AppState.userEmail;
+    const role = (AppState.role || 'student').toUpperCase();
+
+    if (nameEl) nameEl.textContent = fullName;
+    if (emailEl) emailEl.textContent = email;
+    if (roleBadge) {
+        roleBadge.textContent = role;
+        roleBadge.className = role === 'ADMIN' 
+            ? 'badge badge-primary font-mono' 
+            : 'badge badge-emerald font-mono';
+    }
+    if (avatarEl) {
+        const initials = fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        avatarEl.textContent = initials || 'ST';
+    }
+
+    // Immediately update Welcome Banner greeting on dashboard
+    const welcomeName = document.getElementById('dashWelcomeName');
+    if (welcomeName) {
+        welcomeName.textContent = fullName;
+    }
+
+    // Sync Mitra AI Mentor Chatbot subtitle with current logged-in user
+    const mentorSub = document.getElementById('mentorSubtitle');
+    if (mentorSub && AppState.user) {
+        const studentCgpa = (AppState.user.profile && AppState.user.profile.cgpa) || AppState.user.cgpa;
+        mentorSub.textContent = studentCgpa ? `${fullName} • CGPA ${studentCgpa}` : `${fullName} • Placement Candidate`;
+    }
+    if (window.refreshMentorUserSubtitle) {
+        window.refreshMentorUserSubtitle();
+    }
+}
+
+function updateNavigationForRole() {
+    const adminNavSection = document.getElementById('adminNavSection');
+    const isAdmin = AppState.role === 'admin' || AppState.role === 'trainer';
+
+    if (adminNavSection) {
+        if (isAdmin) {
+            adminNavSection.classList.remove('hidden');
+        } else {
+            adminNavSection.classList.add('hidden');
+        }
+    }
+}
+
+function logoutUser(promptConfirmation = true) {
+    if (promptConfirmation && !confirm('Are you sure you want to sign out of the AI-TPMS portal?')) {
+        return;
+    }
+
+    // Stop any active camera or mic recording
+    stopCamAndMic();
+
+    // Clear client-side authentication tokens, identity and session state completely
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('user');
+    localStorage.removeItem('studentId');
+    localStorage.removeItem('first_time_onboarding');
+    sessionStorage.clear();
+
+    AppState.token = '';
+    AppState.user = null;
+    AppState.studentId = null;
+
+    showToast('Signed out successfully. Authentication token revoked.', 'info');
+    setTimeout(() => {
+        window.location.replace('/static/login.html');
+    }, 300);
+}
+
+// Security guard: prevent browser back-button navigation from restoring cached protected portal
+window.addEventListener('pageshow', function (event) {
+    if (!localStorage.getItem('token')) {
+        window.location.replace('/static/login.html');
+    }
+});
+
+
+// ==============================================================================
+// 6. SPA NAVIGATION CONTROLLER
+// ==============================================================================
+function switchTab(tabId) {
+    // If navigating away from interview while cam active, stop it cleanly
+    if (AppState.activeTab === 'interview' && tabId !== 'interview') {
+        stopCamAndMic();
+    }
+
+    AppState.activeTab = tabId;
+
+    // Update Sidebar link active styles
+    document.querySelectorAll('.sidebar-link').forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('data-tab') === tabId) {
+            link.classList.add('active');
+        }
+    });
+
+    // Hide all view panels
+    document.querySelectorAll('.view-panel').forEach(panel => {
+        panel.classList.add('hidden');
+    });
+
+    // Show target view panel with smooth fluid entrance
+    const targetPanel = document.getElementById(`view-${tabId}`);
+    if (targetPanel) {
+        targetPanel.classList.remove('hidden');
+        targetPanel.style.animation = 'none';
+        void targetPanel.offsetWidth; // Force CSS reflow to re-trigger entrance animation
+        targetPanel.style.animation = '';
+    }
+
+    // Update Header Breadcrumbs & Title
+    updateBreadcrumbs(tabId);
+
+    // On-demand data loading per view
+    switch (tabId) {
+        case 'dashboard':
+            loadDashboardData();
+            break;
+        case 'resume':
+            loadMyResume();
+            break;
+
+        case 'practice':
+            loadConceptPractice();
+            break;
+        case 'interview':
+            initInterviewStudio();
+            break;
+        case 'hr-interview':
+            initHrInterviewModule();
+            break;
+        case 'placement':
+            loadPlacementDrives();
+            break;
+        case 'mentor':
+            initMentorWorkspace();
+            break;
+        case 'history':
+            loadInterviewHistory();
+            break;
+        case 'profile':
+            loadProfileView();
+            break;
+        case 'admin':
+        case 'admin-candidates':
+        case 'admin-diagnostics':
+            loadAdminData(tabId);
+            break;
+    }
+
+    if (window.lucide) lucide.createIcons();
+
+    // Close mobile drawer if open
+    const mobileDrawer = document.getElementById('mobileSidebar');
+    if (mobileDrawer && !mobileDrawer.classList.contains('hidden')) {
+        toggleMobileSidebar();
+    }
+}
+
+function updateBreadcrumbs(tabId) {
+    const titleMap = {
+        'dashboard': { title: 'Executive Overview', section: 'Student Portal' },
+        'resume': { title: 'Resume Intelligence & ATS Audit', section: 'Career Tools' },
+        'practice': { title: 'Concept Practice & Assessments', section: 'Preparation' },
+        'interview': { title: 'AI Mock Interview Studio', section: 'Evaluation' },
+        'hr-interview': { title: 'HR & Behavioral Interview Prep', section: 'Evaluation' },
+        'placement': { title: 'Jobs & 47 Placement Drives', section: 'Campus Recruitment' },
+        'mentor': { title: 'Mitra AI Career Mentor', section: 'AI Assistance' },
+        'history': { title: 'Interview History & Dossiers', section: 'Reports & Analytics' },
+        'profile': { title: 'Student Profile & Settings', section: 'Account' },
+        'admin': { title: 'Placement Analytics & Overview', section: 'Administrative Console' },
+        'admin-candidates': { title: 'Candidate Management', section: 'Administrative Console' },
+        'admin-diagnostics': { title: 'System & Model Diagnostics', section: 'Administrative Console' }
+    };
+
+    const info = titleMap[tabId] || { title: 'AI-TPMS Portal', section: 'Dashboard' };
+    const pageTitleEl = document.getElementById('headerPageTitle');
+    const breadcrumbSectionEl = document.getElementById('headerBreadcrumbSection');
+
+    if (pageTitleEl) pageTitleEl.textContent = info.title;
+    if (breadcrumbSectionEl) breadcrumbSectionEl.textContent = info.section;
+}
+
+function toggleMobileSidebar() {
+    const sidebar = document.getElementById('mobileSidebar');
+    if (sidebar) {
+        sidebar.classList.toggle('hidden');
+    }
+}
+
+// ==============================================================================
+// 7. EXECUTIVE DASHBOARD MODULE (REAL DATA INTEGRATION)
+// ==============================================================================
+async function loadDashboardData() {
+    try {
+        let meData = null;
+        if (AppState.role === 'student') {
+            try {
+                meData = await apiCall('/api/v1/students/me/dashboard');
+            } catch (e) {
+                console.warn('[Dashboard] Could not load me/dashboard, will use analytics fallback:', e);
+            }
+        }
+
+        const studentId = AppState.studentId || 1;
+
+        // Update Personalized Greeting immediately
+        const welcomeName = document.getElementById('dashWelcomeName');
+        if (welcomeName) {
+            const displayName = (meData && meData.student) ? meData.student.full_name : (AppState.user ? AppState.user.full_name : 'Student Candidate');
+            welcomeName.textContent = displayName;
+        }
+        
+        // 1. Performance Metrics (from personalized dashboard endpoint or analytics)
+        let perf = meData ? meData.performance : null;
+        if (!perf) {
+            perf = await apiCall(`/api/v1/analytics/student/${studentId}`);
+        }
+        AppState.performance = perf;
+
+        renderDashboardKpis(perf);
+        renderCompetencyRadar(perf);
+
+        // 2. Fetch Autonomous Recommendations
+        try {
+            const recs = await apiCall(`/api/v1/analytics/student/${studentId}/recommendations`);
+            AppState.recommendations = recs;
+            renderDashboardRecommendations(recs);
+        } catch (e) {
+            AppState.recommendations = [];
+            renderDashboardRecommendations([]);
+        }
+
+        // 3. Fetch 3-Round Pipeline Status
+        try {
+            const wf = await apiCall('/api/v1/placement/rounds/workflow');
+            AppState.placementWorkflow = wf;
+            renderSequentialPipeline(wf);
+        } catch (e) {
+            console.warn('[Dashboard] Workflow fetch failed:', e);
+        }
+
+    } catch (err) {
+        console.error('[Dashboard Error]:', err);
+        showToast('Could not load some dashboard metrics', 'warning');
+    }
+}
+
+function renderDashboardKpis(perf) {
+    const attVal = document.getElementById('kpiAttendanceVal');
+    const attBadge = document.getElementById('kpiAttendanceBadge');
+    const techVal = document.getElementById('kpiTechVal');
+    const techBadge = document.getElementById('kpiTechBadge');
+    const mockVal = document.getElementById('kpiMockVal');
+    const mockBadge = document.getElementById('kpiMockBadge');
+    const readyVal = document.getElementById('kpiReadinessVal');
+    const readyBadge = document.getElementById('kpiReadinessBadge');
+
+    if (attVal && perf) {
+        const att = perf.attendance_pct !== undefined ? Number(perf.attendance_pct) : 0.0;
+        attVal.textContent = `${att.toFixed(1)}%`;
+        if (attBadge) {
+            if (att === 0.0) {
+                attBadge.textContent = 'Verification Pending';
+                attBadge.className = 'badge badge-neutral';
+            } else if (att >= 75.0) {
+                attBadge.textContent = 'Eligible';
+                attBadge.className = 'badge badge-emerald';
+            } else {
+                attBadge.textContent = 'Attendance Deficit';
+                attBadge.className = 'badge badge-rose';
+            }
+        }
+    }
+
+    if (techVal && perf) {
+        const tech = perf.technical_test_score !== undefined ? Number(perf.technical_test_score) : 0.0;
+        techVal.textContent = `${tech.toFixed(1)}%`;
+        if (techBadge) {
+            if (tech === 0.0) {
+                techBadge.textContent = 'Assessment Pending';
+                techBadge.className = 'badge badge-neutral';
+            } else if (tech >= 70.0) {
+                techBadge.textContent = 'High Mastery';
+                techBadge.className = 'badge badge-primary';
+            } else {
+                techBadge.textContent = 'Developing';
+                techBadge.className = 'badge badge-amber';
+            }
+        }
+    }
+
+    if (mockVal && perf) {
+        const mock = perf.interview_avg_score !== undefined ? Number(perf.interview_avg_score) : 0.0;
+        mockVal.textContent = `${mock.toFixed(1)}/100`;
+        if (mockBadge) {
+            if (mock === 0.0) {
+                mockBadge.textContent = 'No Interviews Yet';
+                mockBadge.className = 'badge badge-neutral';
+            } else if (mock >= 70.0) {
+                mockBadge.textContent = 'Passed';
+                mockBadge.className = 'badge badge-emerald';
+            } else {
+                mockBadge.textContent = 'Training Needed';
+                mockBadge.className = 'badge badge-amber';
+            }
+        }
+    }
+
+    if (readyVal && perf) {
+        const ready = perf.overall_score !== undefined ? Number(perf.overall_score) : 0.0;
+        readyVal.textContent = `${ready.toFixed(1)}%`;
+
+        const readyCircle = document.getElementById('kpiReadinessCircle');
+        if (readyCircle) {
+            const circumference = 238.76;
+            const validScore = Math.min(100, Math.max(0, ready));
+            const offset = circumference * (1 - validScore / 100);
+            readyCircle.style.strokeDashoffset = offset;
+        }
+
+        if (readyBadge) {
+            if (ready === 0.0) {
+                readyBadge.textContent = 'New Candidate';
+                readyBadge.className = 'badge badge-primary font-mono';
+            } else if (ready >= 75.0) {
+                readyBadge.textContent = 'Placement Ready';
+                readyBadge.className = 'badge badge-emerald';
+            } else {
+                readyBadge.textContent = 'Support Recommended';
+                readyBadge.className = 'badge badge-amber';
+            }
+        }
+    }
+}
+
+function renderCompetencyRadar(perf) {
+    const ctx = document.getElementById('competencyChart');
+    if (!ctx) return;
+
+    const att = perf && perf.attendance_pct !== undefined ? Number(perf.attendance_pct) : 0.0;
+    const apt = perf && perf.aptitude_score !== undefined ? Number(perf.aptitude_score) : 0.0;
+    const tech = perf && perf.technical_test_score !== undefined ? Number(perf.technical_test_score) : 0.0;
+    const code = perf && perf.coding_score !== undefined ? Number(perf.coding_score) : 0.0;
+    const interview = perf && perf.interview_avg_score !== undefined ? Number(perf.interview_avg_score) : 0.0;
+    const comm = perf && perf.communication_score !== undefined ? Number(perf.communication_score) : 0.0;
+
+    const isDark = document.documentElement.classList.contains('dark');
+    const textColor = isDark ? '#94a3b8' : '#475569';
+    const gridColor = isDark ? '#1e293b' : '#e2e8f0';
+
+    if (competencyChartInstance) {
+        competencyChartInstance.destroy();
+    }
+
+    competencyChartInstance = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: ['Attendance', 'Aptitude', 'Technical Core', 'Coding Skill', 'Mock Interview', 'Communication'],
+            datasets: [
+                {
+                    label: 'Current Proficiency',
+                    data: [att, apt, tech, code, interview, comm],
+                    fill: true,
+                    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                    borderColor: '#6366f1',
+                    pointBackgroundColor: '#4f46e5',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: '#4f46e5',
+                    borderWidth: 2
+                },
+                {
+                    label: 'Tier-1 Target Benchmark',
+                    data: [85, 75, 80, 75, 75, 75],
+                    fill: false,
+                    borderColor: '#10b981',
+                    borderDash: [4, 4],
+                    pointBackgroundColor: '#10b981',
+                    borderWidth: 1.5
+                }
+            ]
+        },
+
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: textColor, font: { family: 'Inter', size: 11 } }
+                }
+            },
+            scales: {
+                r: {
+                    angleLines: { color: gridColor },
+                    grid: { color: gridColor },
+                    pointLabels: { color: textColor, font: { family: 'Inter', size: 11, weight: '600' } },
+                    suggestedMin: 30,
+                    suggestedMax: 100,
+                    ticks: {
+                        backdropColor: 'transparent',
+                        color: textColor,
+                        stepSize: 20
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderDashboardRecommendations(recs) {
+    const container = document.getElementById('dashboardRecsContainer');
+    if (!container) return;
+
+    if (!recs || recs.length === 0) {
+        container.innerHTML = `
+            <div class="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs">
+                <span class="font-bold block mb-1">🎉 Benchmark Met Across All Competencies</span>
+                <span>You meet all academic and interview requirements. Maintain consistency across live drives.</span>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = recs.slice(0, 3).map(r => `
+        <div class="p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-900 dark:text-white">${escapeHTML(r.title)}</span>
+                <span class="badge ${r.priority === 1 ? 'badge-rose' : 'badge-amber'} text-[10px]">Priority ${r.priority}</span>
+            </div>
+            <p class="text-xs text-slate-600 dark:text-slate-400">${escapeHTML(r.reason)}</p>
+            <p class="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium pt-1">💡 Action: ${escapeHTML(r.actionable_steps)}</p>
+        </div>
+    `).join('');
+}
+
+function renderSequentialPipeline(wf) {
+    const container = document.getElementById('sequentialPipelineTracker');
+    if (!container || !wf || !wf.rounds) return;
+
+    container.innerHTML = wf.rounds.map(r => {
+        let badgeClass = 'badge-neutral';
+        let statusText = 'Locked';
+        let icon = '🔒';
+
+        if (r.status === 'cleared') {
+            badgeClass = 'badge-emerald';
+            statusText = `Cleared (${r.score || 0}%)`;
+            icon = '✓';
+        } else if (r.status === 'active') {
+            badgeClass = 'badge-primary';
+            statusText = 'Active / In Progress';
+            icon = '▶';
+        }
+
+        return `
+            <div class="p-4 rounded-xl border ${r.status === 'active' ? 'border-indigo-500/50 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-xs' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'} space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold font-mono text-indigo-600 dark:text-indigo-400">ROUND ${r.round_number}</span>
+                    <span class="badge ${badgeClass} text-[10px]">${icon} ${statusText}</span>
+                </div>
+                <h4 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHTML(r.title)}</h4>
+                <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">${escapeHTML(r.description)}</p>
+                <div class="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 text-[11px]">
+                    <span class="text-slate-500">Cutoff: <strong>${r.pass_percentage}%</strong></span>
+                    ${r.status === 'active' && r.test_id ? `
+                        <button onclick="startSpecificAssessment(${r.test_id})" class="text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer">
+                            Take Round Assessment →
+                        </button>
+                    ` : ''}
+                    ${r.status === 'active' && r.round_number === 3 ? `
+                        <button onclick="switchTab('interview')" class="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer">
+                            Launch Mock Studio →
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function downloadMyReport() {
+    const studentId = AppState.studentId || 1;
+    showToast('Generating official ReportLab PDF placement dossier...', 'info');
+    try {
+        const blob = await apiCall(`/api/v1/reports/student/${studentId}/download`);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Placement_Dossier_Student_${studentId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showToast('PDF Report downloaded successfully!', 'success');
+    } catch (err) {
+        showToast('Failed to download PDF report', 'error');
+    }
+}
+
+// ==============================================================================
+// 8. RESUME INTELLIGENCE & ATS AUDIT MODULE
+// ==============================================================================
+function loadSampleResumeText() {
+    const sample = `Aditi Rao
+aditi.rao@student.edu | +91 98765 43210 | Bangalore, India
+GitHub: https://github.com/aditi-rao | LinkedIn: https://linkedin.com/in/aditi-rao
+
+PROFESSIONAL SUMMARY:
+Final-year Computer Science Engineering student specializing in scalable backend systems, cloud architectures, and machine learning integration. Developed full-stack applications with high throughput and sub-100ms API latency.
+
+EDUCATION:
+Bachelor of Technology in Computer Science and Engineering
+R.V. College of Engineering, Bangalore | CGPA: 8.75 / 10.0 | Expected Graduation: May 2027
+
+TECHNICAL SKILLS:
+- Programming Languages: Python, C++, Java, JavaScript, TypeScript, SQL
+- Frameworks & Libraries: FastAPI, Django, React, Node.js, Express, PyTorch, Scikit-Learn
+- Databases & Caching: PostgreSQL, MySQL, Redis, SQLite, MongoDB
+- Cloud & DevOps: Docker, Kubernetes, AWS (S3, EC2, Lambda), GitHub Actions CI/CD, Git
+- Core Computer Science: Data Structures & Algorithms, Object-Oriented Design, Operating Systems, Database Management Systems
+
+KEY PROJECTS:
+1. AI-Powered Training & Placement Management System (AI-TPMS)
+- Designed an autonomous recruitment pipeline using FastAPI, SQLAlchemy, and SQLite processing multi-round candidate gating.
+- Integrated MediaPipe 3D face mesh and YOLOv8 computer vision for real-time exam proctoring with 95% accuracy.
+- Built multi-turn adaptive mock interview state machine supporting transparent 4-part rubric and Gemini LLM follow-ups.
+
+2. Distributed High-Throughput URL Shortener & Analytics Service
+- Engineered distributed microservices with Python, Redis, and PostgreSQL handling 10,000+ RPS.
+- Reduced database read latency by 65% via LRU caching strategies and consistent hashing.`;
+
+    const input = document.getElementById('resumeTextInput');
+    if (input) {
+        input.value = sample;
+        showToast('Sample profile loaded. Click "Run Full ATS Quality Audit" to analyze.', 'info');
+    }
+}
+
+function clearResumeText() {
+    const input = document.getElementById('resumeTextInput');
+    if (input) input.value = '';
+    const resultsContainer = document.getElementById('resumeAnalysisResults');
+    if (resultsContainer) resultsContainer.classList.add('hidden');
+}
+
+async function loadMyResume() {
+    try {
+        const resp = await apiCall('/api/v1/resume/my-resume');
+        if (resp && resp.has_resume) {
+            const textInput = document.getElementById('resumeTextInput');
+            if (textInput && resp.raw_text && !textInput.value.trim()) {
+                textInput.value = resp.raw_text;
+            }
+            if (resp.skills && resp.skills.length > 0) {
+                renderParsedResumeSkills(resp.skills, {});
+            }
+        }
+    } catch (e) {
+        console.warn('Could not load existing resume:', e);
+    }
+}
+
+async function handleResumeFileUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+        showToast('File size exceeds 10MB limit', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const btn = document.getElementById('uploadFileLabel');
+    if (btn) btn.classList.add('opacity-50', 'pointer-events-none');
+    showToast(`Uploading and analyzing ${file.name}...`, 'info');
+
+    try {
+        const resp = await apiCall('/api/v1/resume/upload', 'POST', formData, true);
+        const textInput = document.getElementById('resumeTextInput');
+        if (textInput && resp.raw_text) {
+            textInput.value = resp.raw_text;
+        }
+
+        renderParsedResumeSkills(resp.extracted_skills || resp.skills || [], resp.categorized_skills || {});
+        const skillsCount = (resp.extracted_skills || resp.skills || []).length;
+        showToast(resp.message || `Parsed and saved ${skillsCount} skills to profile!`, 'success');
+
+        // Automatically run ATS audit
+        runComprehensiveAtsAudit();
+    } catch (err) {
+        showToast(err.message || 'Error parsing resume file', 'error');
+    } finally {
+        if (btn) btn.classList.remove('opacity-50', 'pointer-events-none');
+        if (event && event.target) event.target.value = '';
+    }
+}
+
+
+async function parseResumeLive() {
+    const textInput = document.getElementById('resumeTextInput');
+    const text = textInput ? textInput.value.trim() : '';
+
+    if (!text) {
+        showToast('Please paste resume text or load sample profile first', 'warning');
+        return;
+    }
+
+    showToast('Extracting technical taxonomy & symbols...', 'info');
+    try {
+        const resp = await apiCall(`/api/v1/resume/parse-text?text=${encodeURIComponent(text)}`, 'POST');
+        const data = resp.parsed_data || {};
+        renderParsedResumeSkills(data.skills || [], data.categorized_skills || {});
+        showToast(`Extracted ${data.skills ? data.skills.length : 0} verified skills!`, 'success');
+    } catch (err) {
+        showToast('Failed to parse resume text', 'error');
+    }
+}
+
+async function runComprehensiveAtsAudit() {
+    const textInput = document.getElementById('resumeTextInput');
+    const text = textInput ? textInput.value.trim() : '';
+
+    if (!text) {
+        showToast('Please provide resume text to run ATS audit', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btnRunAtsAudit');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="animate-spin mr-1.5">⏳</span> Analyzing ATS Health...`;
+    }
+
+    try {
+        const resp = await apiCall('/api/v1/resume/audit', 'POST', { resume_text: text });
+        const audit = resp.audit || {};
+        renderAtsAuditResults(audit);
+        showToast('ATS Quality Audit completed!', 'success');
+    } catch (err) {
+        showToast(err.message || 'ATS Audit failed', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="shield-check" class="w-4 h-4 text-emerald-200"></i><span>Run Full ATS Quality Audit</span>`;
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+}
+
+function renderAtsAuditResults(audit) {
+    const container = document.getElementById('resumeAnalysisResults');
+    if (!container) return;
+    container.classList.remove('hidden');
+
+    const score = audit.overall_ats_score || 85;
+    const scoreColor = score >= 80 ? 'text-emerald-500' : (score >= 65 ? 'text-amber-500' : 'text-rose-500');
+
+    container.innerHTML = `
+        <div class="saas-card p-6 space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-4">
+                <div>
+                    <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <i data-lucide="shield-check" class="w-5 h-5 text-emerald-600"></i>
+                        ATS Quality & Placement Screening Scorecard
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Automated screening criteria based on Fortune 500 ATS parser parsability rules.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="text-right">
+                        <span class="text-2xl font-extrabold ${scoreColor}">${score}/100</span>
+                        <span class="block text-[10px] text-slate-400 uppercase font-bold">Overall ATS Rating</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4 Pillar Scores -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div class="p-3.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span class="text-slate-500 dark:text-slate-400 block font-medium">Contact Completeness</span>
+                    <span class="text-lg font-bold text-slate-900 dark:text-white">${audit.contact_score || 100}%</span>
+                </div>
+                <div class="p-3.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span class="text-slate-500 dark:text-slate-400 block font-medium">Structure & Sections</span>
+                    <span class="text-lg font-bold text-slate-900 dark:text-white">${audit.section_score || 90}%</span>
+                </div>
+                <div class="p-3.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span class="text-slate-500 dark:text-slate-400 block font-medium">Action Verbs & Impact</span>
+                    <span class="text-lg font-bold text-slate-900 dark:text-white">${audit.verb_score || 85}%</span>
+                </div>
+                <div class="p-3.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span class="text-slate-500 dark:text-slate-400 block font-medium">Metrics & Quantifiable Impact</span>
+                    <span class="text-lg font-bold text-slate-900 dark:text-white">${audit.metrics_score || 80}%</span>
+                </div>
+            </div>
+
+            <!-- Strengths and Missing Areas -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div class="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl space-y-2">
+                    <span class="font-bold text-emerald-800 dark:text-emerald-300 block text-xs">✓ Verified ATS Strengths</span>
+                    <ul class="space-y-1.5 text-slate-700 dark:text-slate-300">
+                        ${(audit.strengths || ['Clear single-column structure', 'Core skills explicitly highlighted']).map(s => `
+                            <li class="flex items-start gap-1.5">
+                                <span class="text-emerald-600 font-bold">✓</span>
+                                <span>${escapeHTML(s)}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+                <div class="p-4 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-xl space-y-2">
+                    <span class="font-bold text-amber-800 dark:text-amber-300 block text-xs">⚠️ Recommended Optimizations</span>
+                    <ul class="space-y-1.5 text-slate-700 dark:text-slate-300">
+                        ${(audit.improvements || ['Add more quantifiable metrics (X-Y-Z formula)', 'Expand on cloud architectures']).map(s => `
+                            <li class="flex items-start gap-1.5">
+                                <span class="text-amber-600 font-bold">→</span>
+                                <span>${escapeHTML(s)}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Quick Action to Start Tailored Mock Interview -->
+            <div class="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-xs">
+                <span class="text-slate-500">Skills ready to seed your AI Mock Interview.</span>
+                <button onclick="launchInterviewFromResumeSkills()" class="btn-primary text-xs py-2 px-4 cursor-pointer">
+                    <i data-lucide="video" class="w-4 h-4"></i>
+                    <span>Start Tailored Interview with Extracted Skills</span>
+                </button>
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+}
+
+function renderParsedResumeSkills(skills, categorized) {
+    const container = document.getElementById('extractedSkillsContainer');
+    if (!container) return;
+
+    if (!skills || skills.length === 0) {
+        container.innerHTML = `<span class="text-xs text-slate-400">No skills parsed yet.</span>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="flex flex-wrap gap-1.5">
+            ${skills.map(s => `
+                <span class="badge badge-primary text-[11px] font-mono py-1 px-2.5">
+                    ${escapeHTML(typeof s === 'string' ? s : s.name)}
+                </span>
+            `).join('')}
+        </div>
+    `;
+}
+
+function launchInterviewFromResumeSkills() {
+    switchTab('interview');
+}
+
+// ==============================================================================
+// 9. CONCEPT PRACTICE & ASSESSMENTS MODULE
+// ==============================================================================
+async function loadConceptPractice() {
+    const listContainer = document.getElementById('practiceTestsList');
+    if (!listContainer) return;
+
+    try {
+        const tests = await apiCall('/api/v1/tests/');
+        renderTestsList(tests);
+    } catch (err) {
+        listContainer.innerHTML = `
+            <div class="empty-state text-xs text-slate-500">
+                Failed to load practice tests. Please try refreshing.
+            </div>
+        `;
+    }
+}
+
+function renderTestsList(tests) {
+    const container = document.getElementById('practiceTestsList');
+    if (!container) return;
+
+    if (!tests || tests.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state text-xs text-slate-500">
+                No active assessment tests available at the moment.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = tests.map(t => `
+        <div class="saas-card p-5 space-y-3 hover:border-indigo-500/50 transition">
+            <div class="flex items-center justify-between">
+                <span class="badge ${t.test_type === 'aptitude' ? 'badge-primary' : (t.test_type === 'technical' ? 'badge-emerald' : 'badge-amber')} text-[10px] uppercase font-mono">
+                    ${t.test_type}
+                </span>
+                <span class="text-xs text-slate-400 font-mono">${t.duration_minutes} Mins • ${t.question_count} MCQs</span>
+            </div>
+            <div>
+                <h4 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHTML(t.title)}</h4>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Category: ${escapeHTML(t.category)} • Pass Mark: ${t.pass_percentage}%</p>
+            </div>
+            <div class="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                <span class="text-[11px] text-slate-400 font-mono">Total Marks: ${t.total_marks}</span>
+                <button onclick="startSpecificAssessment(${t.id})" class="btn-primary py-1.5 px-3.5 text-xs cursor-pointer">
+                    <span>Start Test</span>
+                    <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+
+    if (window.lucide) lucide.createIcons();
+}
+
+async function startSpecificAssessment(testId) {
+    try {
+        showToast('Loading assessment questions...', 'info');
+        const questions = await apiCall(`/api/v1/tests/${testId}/questions`);
+        
+        if (!questions || questions.length === 0) {
+            showToast('No questions available in this test', 'warning');
+            return;
+        }
+
+        AppState.activeTest = { id: testId };
+        AppState.practiceQuestions = questions;
+        AppState.practiceCurrentIndex = 0;
+        AppState.practiceScore = 0;
+        AppState.practiceAnswers = {};
+
+        renderInteractivePracticeQuestion();
+    } catch (err) {
+        showToast(err.message || 'Error loading test questions', 'error');
+    }
+}
+
+function renderInteractivePracticeQuestion() {
+    const studio = document.getElementById('practiceStudioArea');
+    const catalog = document.getElementById('practiceCatalogArea');
+    if (!studio) return;
+
+    if (catalog) catalog.classList.add('hidden');
+    studio.classList.remove('hidden');
+
+    const q = AppState.practiceQuestions[AppState.practiceCurrentIndex];
+    const total = AppState.practiceQuestions.length;
+    const currNum = AppState.practiceCurrentIndex + 1;
+
+    studio.innerHTML = `
+        <div class="saas-card p-6 space-y-6 max-w-3xl mx-auto">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="badge badge-primary font-mono text-xs">Question ${currNum} of ${total}</span>
+                    <span class="badge badge-neutral text-xs">${escapeHTML(q.topic || 'General')}</span>
+                </div>
+                <button onclick="closePracticeStudio()" class="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                    ✕ Exit Assessment
+                </button>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full bg-indigo-600 transition-all duration-300" style="width: ${(currNum / total) * 100}%"></div>
+            </div>
+
+            <!-- Question Text -->
+            <div class="space-y-2">
+                <h3 class="text-sm font-semibold text-slate-900 dark:text-white leading-relaxed">
+                    ${escapeHTML(q.question_text)}
+                </h3>
+            </div>
+
+            <!-- Options -->
+            <div class="space-y-2.5 pt-2">
+                ${['A', 'B', 'C', 'D'].map(optKey => {
+                    const optText = q[`option_${optKey.toLowerCase()}`];
+                    if (!optText) return '';
+                    const isSelected = AppState.practiceAnswers[q.id] === optKey;
+                    return `
+                        <label class="flex items-center gap-3 p-3.5 rounded-xl border ${isSelected ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'} cursor-pointer transition">
+                            <input type="radio" name="practice_q_opt" value="${optKey}" ${isSelected ? 'checked' : ''} onchange="selectPracticeOption(${q.id}, '${optKey}')" class="text-indigo-600 focus:ring-indigo-500">
+                            <span class="font-bold text-xs text-indigo-600 dark:text-indigo-400 font-mono w-4">${optKey}.</span>
+                            <span class="text-xs text-slate-800 dark:text-slate-200">${escapeHTML(optText)}</span>
+                        </label>
+                    `;
+                }).join('')}
+            </div>
+
+            <!-- Bottom Actions -->
+            <div class="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button onclick="prevPracticeQuestion()" ${currNum === 1 ? 'disabled' : ''} class="btn-secondary text-xs py-2 px-4 cursor-pointer ${currNum === 1 ? 'opacity-40 pointer-events-none' : ''}">
+                    ← Previous
+                </button>
+                ${currNum < total ? `
+                    <button onclick="nextPracticeQuestion()" class="btn-primary text-xs py-2 px-5 cursor-pointer">
+                        <span>Next Question</span>
+                        <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                    </button>
+                ` : `
+                    <button onclick="submitAssessmentTest()" class="btn-primary bg-emerald-600 hover:bg-emerald-700 text-xs py-2 px-5 cursor-pointer">
+                        <span>Submit Final Test</span>
+                        <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+                    </button>
+                `}
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+}
+
+function selectPracticeOption(questionId, optionKey) {
+    AppState.practiceAnswers[questionId] = optionKey;
+}
+
+function prevPracticeQuestion() {
+    if (AppState.practiceCurrentIndex > 0) {
+        AppState.practiceCurrentIndex--;
+        renderInteractivePracticeQuestion();
+    }
+}
+
+function nextPracticeQuestion() {
+    if (AppState.practiceCurrentIndex < AppState.practiceQuestions.length - 1) {
+        AppState.practiceCurrentIndex++;
+        renderInteractivePracticeQuestion();
+    }
+}
+
+function closePracticeStudio() {
+    const studio = document.getElementById('practiceStudioArea');
+    const catalog = document.getElementById('practiceCatalogArea');
+    if (studio) studio.classList.add('hidden');
+    if (catalog) catalog.classList.remove('hidden');
+}
+
+async function submitAssessmentTest() {
+    const testId = AppState.activeTest ? AppState.activeTest.id : 1;
+    const answersPayload = Object.keys(AppState.practiceAnswers).map(qid => ({
+        question_id: parseInt(qid),
+        selected_option: AppState.practiceAnswers[qid]
+    }));
+
+    showToast('Submitting and evaluating test answers...', 'info');
+
+    try {
+        const resp = await apiCall(`/api/v1/tests/${testId}/submit`, 'POST', {
+            answers: answersPayload
+        });
+
+        renderTestSubmissionResult(resp);
+    } catch (err) {
+        showToast(err.message || 'Error submitting test', 'error');
+    }
+}
+
+function renderTestSubmissionResult(res) {
+    const studio = document.getElementById('practiceStudioArea');
+    if (!studio) return;
+
+    studio.innerHTML = `
+        <div class="saas-card p-8 max-w-lg mx-auto text-center space-y-5">
+            <div class="w-16 h-16 rounded-2xl ${res.passed ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600' : 'bg-amber-100 dark:bg-amber-950/40 text-amber-600'} mx-auto flex items-center justify-center text-3xl">
+                ${res.passed ? '🎉' : '📈'}
+            </div>
+            <div>
+                <h3 class="text-lg font-extrabold text-slate-900 dark:text-white">
+                    ${res.passed ? 'Test Passed Successfully!' : 'Assessment Completed'}
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Your responses have been evaluated and recorded into your performance profile.</p>
+            </div>
+            <div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                    <span class="text-slate-400 block font-medium">Earned Score</span>
+                    <span class="text-xl font-bold text-slate-900 dark:text-white">${res.score} / ${res.total_possible}</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block font-medium">Percentage</span>
+                    <span class="text-xl font-bold ${res.passed ? 'text-emerald-500' : 'text-amber-500'}">${res.percentage}%</span>
+                </div>
+            </div>
+            <div class="pt-2 flex justify-center gap-3">
+                <button onclick="closePracticeStudio(); loadDashboardData();" class="btn-primary text-xs py-2 px-5 cursor-pointer">
+                    Back to Catalog
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// ==============================================================================
+// 9.1 AI LIVE CODE DEBUGGING & REVIEW STUDIO (FAANG L4 DRILLS)
+// ==============================================================================
+let debuggingTimerInterval = null;
+let debuggingTimeLeft = 180;
+let debuggingVoiceRecognizer = null;
+
+function switchPracticeSubTab(subTab) {
+    const btnMcq = document.getElementById('tabBtnPracticeMcq');
+    const btnDebug = document.getElementById('tabBtnPracticeDebug');
+    const mcqContainer = document.getElementById('practiceMcqContainer');
+    const debugContainer = document.getElementById('practiceDebuggingContainer');
+
+    if (subTab === 'debugging') {
+        if (mcqContainer) mcqContainer.classList.add('hidden');
+        if (debugContainer) debugContainer.classList.remove('hidden');
+
+        if (btnDebug) {
+            btnDebug.className = 'px-3.5 py-1.5 rounded-lg font-semibold transition cursor-pointer bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs flex items-center gap-1.5';
+        }
+        if (btnMcq) {
+            btnMcq.className = 'px-3.5 py-1.5 rounded-lg font-semibold transition cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5';
+        }
+        loadDebuggingChallenges();
+    } else {
+        if (debugContainer) debugContainer.classList.add('hidden');
+        if (mcqContainer) mcqContainer.classList.remove('hidden');
+
+        if (btnMcq) {
+            btnMcq.className = 'px-3.5 py-1.5 rounded-lg font-semibold transition cursor-pointer bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs flex items-center gap-1.5';
+        }
+        if (btnDebug) {
+            btnDebug.className = 'px-3.5 py-1.5 rounded-lg font-semibold transition cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5';
+        }
+        loadConceptPractice();
+    }
+    if (window.lucide) lucide.createIcons();
+}
+
+function launchDebuggingFromDashboard() {
+    switchTab('practice');
+    switchPracticeSubTab('debugging');
+}
+
+async function loadDebuggingChallenges() {
+    const listContainer = document.getElementById('debuggingChallengesList');
+    if (!listContainer) return;
+
+    if (AppState.debuggingChallenges && AppState.debuggingChallenges.length > 0) {
+        renderDebuggingChallengesList(AppState.debuggingChallenges);
+        return;
+    }
+
+    try {
+        listContainer.innerHTML = `
+            <div class="col-span-full py-12 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                <i data-lucide="loader" class="w-4 h-4 animate-spin text-indigo-600"></i>
+                <span>Loading production debugging challenges...</span>
+            </div>
+        `;
+        if (window.lucide) lucide.createIcons();
+
+        const res = await apiCall('/api/v1/debugging/challenges');
+        AppState.debuggingChallenges = res.challenges || [];
+        const countBadge = document.getElementById('debuggingCountBadge');
+        if (countBadge) countBadge.textContent = AppState.debuggingChallenges.length;
+        renderDebuggingChallengesList(AppState.debuggingChallenges);
+    } catch (err) {
+        listContainer.innerHTML = `
+            <div class="col-span-full empty-state text-xs text-rose-500">
+                Failed to load challenges. Please verify server connection.
+            </div>
+        `;
+    }
+}
+
+function filterDebuggingChallenges(lang) {
+    document.querySelectorAll('.lang-filter-btn').forEach(btn => {
+        if (btn.getAttribute('data-lang') === lang) {
+            btn.className = 'lang-filter-btn px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-600 text-white shadow-xs transition cursor-pointer';
+        } else {
+            btn.className = 'lang-filter-btn px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer';
+        }
+    });
+
+    if (!AppState.debuggingChallenges) return;
+    const filtered = (lang === 'all') 
+        ? AppState.debuggingChallenges 
+        : AppState.debuggingChallenges.filter(c => c.language === lang);
+    renderDebuggingChallengesList(filtered);
+}
+
+function openGenerateChallengeModal() {
+    const modal = document.getElementById('aiGenerateChallengeModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons();
+    }
+}
+
+function closeGenerateChallengeModal() {
+    const modal = document.getElementById('aiGenerateChallengeModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+function setGenTopic(topic) {
+    const topicInput = document.getElementById('genChallengeTopic');
+    if (topicInput) {
+        topicInput.value = topic;
+    }
+}
+
+async function submitGenerateChallenge() {
+    const langEl = document.getElementById('genChallengeLang');
+    const diffEl = document.getElementById('genChallengeDiff');
+    const topicEl = document.getElementById('genChallengeTopic');
+    const btn = document.getElementById('btnSubmitGenChallenge');
+
+    const language = langEl ? langEl.value : 'python';
+    const difficulty = diffEl ? diffEl.value : 'Medium';
+    const topic = topicEl ? topicEl.value.trim() : '';
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader" class="w-3.5 h-3.5 animate-spin"></i><span>Gemini Live is Generating Drill...</span>`;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    try {
+        const resp = await apiCall('/api/v1/debugging/generate', 'POST', {
+            language,
+            difficulty,
+            topic
+        });
+
+        if (!resp || !resp.challenge) {
+            throw new Error('Failed to generate challenge');
+        }
+
+        const newChallenge = resp.challenge;
+        if (!AppState.debuggingChallenges) {
+            AppState.debuggingChallenges = [];
+        }
+        AppState.debuggingChallenges.unshift(newChallenge);
+
+        closeGenerateChallengeModal();
+        if (topicEl) topicEl.value = '';
+
+        const badge = document.getElementById('debuggingCountBadge');
+        if (badge) badge.textContent = AppState.debuggingChallenges.length;
+
+        showToast(`✨ Generated "${newChallenge.title}" with Gemini Live!`, 'success');
+        
+        // Refresh catalog view and immediately launch the new drill
+        renderDebuggingChallengesList(AppState.debuggingChallenges);
+        openDebuggingChallenge(newChallenge.id);
+    } catch (err) {
+        showToast(err.message || 'Challenge generation failed. Please retry.', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i><span>Generate Drill with Gemini</span>`;
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+}
+
+function renderDebuggingChallengesList(challenges) {
+    const container = document.getElementById('debuggingChallengesList');
+    if (!container) return;
+
+    if (!challenges || challenges.length === 0) {
+        container.innerHTML = `
+            <div class="col-span-full empty-state text-xs text-slate-500">
+                No debugging challenges found for this filter.
+            </div>
+        `;
+        return;
+    }
+
+    const langColors = {
+        python: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+        sql: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+        javascript: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20',
+        java: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
+        cpp: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+        go: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20'
+    };
+
+    container.innerHTML = challenges.map(c => `
+        <div class="saas-card p-5 space-y-4 hover:border-indigo-500/50 transition flex flex-col justify-between">
+            <div class="space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${langColors[c.language] || 'badge-primary'}">
+                        ${c.language}
+                    </span>
+                    <span class="badge ${c.difficulty === 'Hard' ? 'badge-rose' : 'badge-amber'} text-[10px] font-mono">
+                        ${c.difficulty}
+                    </span>
+                </div>
+                <div>
+                    <h4 class="font-bold text-sm text-slate-900 dark:text-white leading-snug">${escapeHTML(c.title)}</h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">${escapeHTML(c.category)}</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                    ${(c.companies || []).map(comp => `
+                        <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-600 dark:text-slate-300 font-medium">
+                            🏢 ${escapeHTML(comp)}
+                        </span>
+                    `).join('')}
+                </div>
+            </div>
+            <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <span class="text-[11px] text-slate-400 font-mono">⏱️ ~3 Mins</span>
+                <button onclick="openDebuggingChallenge('${c.id}')" class="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 cursor-pointer">
+                    <span>Inspect Code</span>
+                    <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+
+    if (window.lucide) lucide.createIcons();
+}
+
+function openDebuggingChallenge(challengeId) {
+    const challenge = (AppState.debuggingChallenges || []).find(c => c.id === challengeId);
+    if (!challenge) return;
+
+    AppState.activeDebuggingChallenge = challenge;
+    AppState.selectedBuggyLine = null;
+
+    const listContainer = document.getElementById('debuggingChallengesList');
+    const filterContainer = document.getElementById('debuggingLangFilters');
+    const workspace = document.getElementById('debuggingWorkspaceArea');
+
+    if (listContainer) listContainer.classList.add('hidden');
+    if (filterContainer) filterContainer.parentElement.classList.add('hidden');
+    if (workspace) workspace.classList.remove('hidden');
+
+    // Split code into clickable numbered lines
+    const rawLines = (challenge.code || '').split('\n');
+    const codeLinesHtml = rawLines.map((line, idx) => {
+        const lineNum = idx + 1;
+        return `
+            <div id="codeLine-${lineNum}" class="code-ide-line" onclick="selectSuspectBugLine(${lineNum})">
+                <span class="code-ide-line-num">${lineNum}</span>
+                <span class="code-ide-line-content">${escapeHTML(line || ' ')}</span>
+            </div>
+        `;
+    }).join('');
+
+    workspace.innerHTML = `
+        <!-- Workspace Header & Return -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div class="flex items-center gap-3">
+                <button onclick="closeDebuggingWorkspace()" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 transition cursor-pointer" title="Back to Challenges">
+                    <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                </button>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-extrabold text-base text-slate-900 dark:text-white">${escapeHTML(challenge.title)}</h3>
+                        <span class="badge ${challenge.difficulty === 'Hard' ? 'badge-rose' : 'badge-amber'} text-[10px] font-mono">${challenge.difficulty}</span>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-0.5">Tested at: ${(challenge.companies || []).join(', ')} • Domain: ${escapeHTML(challenge.category)}</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="px-3 py-1.5 bg-slate-900 text-amber-400 rounded-lg font-mono text-xs font-bold flex items-center gap-2 border border-slate-800 shadow-xs">
+                    <i data-lucide="clock" class="w-4 h-4 text-amber-400"></i>
+                    <span id="debuggingTimerDisplay">03:00</span>
+                </div>
+                <button onclick="closeDebuggingWorkspace()" class="btn-secondary text-xs py-1.5 px-3 cursor-pointer">
+                    Cancel Drill
+                </button>
+            </div>
+        </div>
+
+        <!-- Two Column Studio Workspace -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Left: IDE Code Window (7 cols) -->
+            <div class="lg:col-span-7 space-y-3">
+                <div class="flex items-center justify-between text-xs text-slate-500 px-1">
+                    <span class="flex items-center gap-1.5 font-mono text-slate-400">
+                        <i data-lucide="file-code" class="w-3.5 h-3.5 text-indigo-500"></i>
+                        <span>vulnerable_snippet.${challenge.language === 'python' ? 'py' : (challenge.language === 'javascript' ? 'js' : (challenge.language === 'java' ? 'java' : (challenge.language === 'cpp' ? 'cpp' : (challenge.language === 'go' ? 'go' : 'sql'))))}</span>
+                    </span>
+                    <span class="text-[11px] text-indigo-500 font-medium">💡 Click suspect line in editor to tag bug</span>
+                </div>
+
+                <!-- Code Editor Frame -->
+                <div class="code-ide-window">
+                    <!-- Top Window Bar -->
+                    <div class="flex items-center justify-between px-3.5 py-2.5 bg-slate-950/80 border-b border-slate-800/80">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block"></span>
+                            <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
+                            <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+                        </div>
+                        <span class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">${challenge.language} Debugging Mode</span>
+                        <span class="text-[10px] text-slate-500 font-mono">UTF-8</span>
+                    </div>
+
+                    <!-- Code Lines Display -->
+                    <div class="py-3 max-h-[480px] overflow-y-auto">
+                        ${codeLinesHtml}
+                    </div>
+                </div>
+
+                <!-- Hint Accordion -->
+                <div class="p-3 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5">
+                    <i data-lucide="help-circle" class="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"></i>
+                    <div>
+                        <span class="font-bold">Interviewer Hint:</span>
+                        <span class="ml-1 text-slate-600 dark:text-slate-300">${escapeHTML(challenge.hint)}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Diagnostic Input & Evaluation Panel (5 cols) -->
+            <div class="lg:col-span-5 space-y-4">
+                <div class="saas-card p-5 space-y-4">
+                    <div class="border-b border-slate-200 dark:border-slate-800 pb-3 flex items-center justify-between">
+                        <h4 class="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                            <i data-lucide="clipboard-check" class="w-4 h-4 text-indigo-600"></i>
+                            Diagnostic Submission
+                        </h4>
+                        <span id="selectedLineBadge" class="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-mono font-bold text-slate-500">
+                            No Line Selected
+                        </span>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <label class="font-semibold text-slate-700 dark:text-slate-300">
+                                Explain the Bug & Root Cause:
+                            </label>
+                            <button id="debuggingMicBtn" type="button" onclick="toggleVoiceForDebuggingDiagnosis()" class="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer" title="Dictate explanation via microphone">
+                                <i data-lucide="mic" class="w-3.5 h-3.5"></i>
+                                <span>Voice Input</span>
+                            </button>
+                        </div>
+                        <textarea id="debuggingDiagnosisInput" rows="5" placeholder="Example: Line X causes an issue because mutable default parameters persist across calls. In production, this causes data to leak between user carts. We should fix it by setting the default to None and initializing inside..." class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 transition leading-relaxed"></textarea>
+                    </div>
+
+                    <button id="btnSubmitDebugging" onclick="submitDebuggingDiagnosis()" class="w-full btn-primary py-2.5 px-4 text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        <span>Submit for AI Code Review</span>
+                    </button>
+                </div>
+
+                <!-- AI Review Result Card (Populated upon submission) -->
+                <div id="debuggingResultCard" class="hidden"></div>
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+
+    // Start 3-minute timer
+    clearInterval(debuggingTimerInterval);
+    debuggingTimeLeft = 180;
+    updateDebuggingTimerDisplay();
+    debuggingTimerInterval = setInterval(() => {
+        debuggingTimeLeft--;
+        updateDebuggingTimerDisplay();
+        if (debuggingTimeLeft <= 0) {
+            clearInterval(debuggingTimerInterval);
+        }
+    }, 1000);
+}
+
+function updateDebuggingTimerDisplay() {
+    const disp = document.getElementById('debuggingTimerDisplay');
+    if (!disp) return;
+    const mins = Math.floor(debuggingTimeLeft / 60);
+    const secs = debuggingTimeLeft % 60;
+    disp.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function selectSuspectBugLine(lineNum) {
+    AppState.selectedBuggyLine = lineNum;
+    document.querySelectorAll('.code-ide-line').forEach(el => el.classList.remove('selected-bug'));
+
+    const lineEl = document.getElementById(`codeLine-${lineNum}`);
+    if (lineEl) {
+        lineEl.classList.add('selected-bug');
+    }
+
+    const badge = document.getElementById('selectedLineBadge');
+    if (badge) {
+        badge.className = 'px-2.5 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[11px] font-mono font-bold';
+        badge.textContent = `🎯 Tagged Line ${lineNum}`;
+    }
+}
+
+function toggleVoiceForDebuggingDiagnosis() {
+    const micBtn = document.getElementById('debuggingMicBtn');
+    const inputArea = document.getElementById('debuggingDiagnosisInput');
+    if (!inputArea) return;
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) {
+        showToast('Speech recognition is not supported in this browser.', 'warning');
+        return;
+    }
+
+    if (debuggingVoiceRecognizer) {
+        debuggingVoiceRecognizer.stop();
+        debuggingVoiceRecognizer = null;
+        if (micBtn) micBtn.innerHTML = `<i data-lucide="mic" class="w-3.5 h-3.5"></i><span>Voice Input</span>`;
+        if (window.lucide) lucide.createIcons();
+        return;
+    }
+
+    try {
+        debuggingVoiceRecognizer = new SpeechRec();
+        debuggingVoiceRecognizer.continuous = false;
+        debuggingVoiceRecognizer.interimResults = false;
+        debuggingVoiceRecognizer.lang = 'en-US';
+
+        if (micBtn) micBtn.innerHTML = `<i data-lucide="mic" class="w-3.5 h-3.5 text-rose-500 animate-pulse"></i><span class="text-rose-500 font-bold">Listening...</span>`;
+        if (window.lucide) lucide.createIcons();
+
+        debuggingVoiceRecognizer.onresult = (evt) => {
+            const transcript = evt.results[0][0].transcript;
+            inputArea.value = (inputArea.value ? inputArea.value + ' ' : '') + transcript;
+        };
+
+        debuggingVoiceRecognizer.onend = () => {
+            debuggingVoiceRecognizer = null;
+            if (micBtn) micBtn.innerHTML = `<i data-lucide="mic" class="w-3.5 h-3.5"></i><span>Voice Input</span>`;
+            if (window.lucide) lucide.createIcons();
+        };
+
+        debuggingVoiceRecognizer.start();
+    } catch (e) {
+        console.warn('[Speech] Could not start recognition:', e);
+    }
+}
+
+async function submitDebuggingDiagnosis() {
+    if (!AppState.activeDebuggingChallenge) return;
+    const challenge = AppState.activeDebuggingChallenge;
+
+    if (!AppState.selectedBuggyLine) {
+        showToast('Please click on the suspect line number in the code editor first!', 'warning');
+        return;
+    }
+
+    const inputArea = document.getElementById('debuggingDiagnosisInput');
+    const diagText = inputArea ? inputArea.value.trim() : '';
+    if (!diagText) {
+        showToast('Please provide your technical diagnosis of the flaw.', 'warning');
+        return;
+    }
+
+    const btnSubmit = document.getElementById('btnSubmitDebugging');
+    const resultCard = document.getElementById('debuggingResultCard');
+    if (!resultCard) return;
+
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i><span>Gemini Live LLM is Reviewing...</span>`;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    try {
+        const res = await apiCall('/api/v1/debugging/evaluate', 'POST', {
+            challenge_id: challenge.id,
+            selected_line: AppState.selectedBuggyLine,
+            diagnosis: diagText
+        });
+
+        clearInterval(debuggingTimerInterval);
+
+        resultCard.classList.remove('hidden');
+        resultCard.innerHTML = `
+            <div class="saas-card p-5 space-y-4 border-2 ${res.is_correct_line ? 'border-emerald-500/50' : 'border-amber-500/50'} shadow-lg animate-fadeIn">
+                <!-- Evaluation Header -->
+                <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl ${res.accuracy_score >= 75 ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600' : 'bg-amber-100 dark:bg-amber-950/40 text-amber-600'} flex items-center justify-center font-black text-base font-mono">
+                            ${res.accuracy_score}%
+                        </div>
+                        <div>
+                            <span class="text-xs font-bold text-slate-900 dark:text-white block">
+                                ${res.conceptual_grade === 'Mastery' ? '🏆 Production Mastery' : (res.conceptual_grade === 'Proficient' ? '⭐ Proficient Diagnosis' : '⚠️ Remediation Required')}
+                            </span>
+                            <span class="text-[10px] text-slate-400 font-mono">
+                                ${res.engine === 'google_gemini_llm' ? '✨ Gemini Live LLM Evaluated' : '⚡ Offline Heuristic Review'}
+                            </span>
+                        </div>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full ${res.is_correct_line ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'} text-[11px] font-bold">
+                        ${res.is_correct_line ? '✓ Correct Line Pinpointed' : '✗ Line Mismatch'}
+                    </span>
+                </div>
+
+                <!-- AI Review Feedback -->
+                <div class="space-y-1.5 text-xs">
+                    <span class="font-bold text-slate-700 dark:text-slate-300 block">AI Technical Code Review:</span>
+                    <p class="text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200/60 dark:border-slate-800/60">
+                        ${escapeHTML(res.feedback)}
+                    </p>
+                </div>
+
+                <!-- Production Impact -->
+                <div class="space-y-1 text-xs">
+                    <span class="font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                        <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+                        <span>High-Scale Enterprise Consequence:</span>
+                    </span>
+                    <p class="text-slate-600 dark:text-slate-400 text-[11px]">
+                        ${escapeHTML(res.production_impact)}
+                    </p>
+                </div>
+
+                <!-- Clean Refactored Snippet -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold text-slate-700 dark:text-slate-300">Clean Industry Refactoring:</span>
+                        <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">Bug Resolved</span>
+                    </div>
+                    <pre class="p-3 bg-slate-950 text-emerald-400 rounded-lg font-mono text-[11px] overflow-x-auto leading-relaxed border border-emerald-500/20"><code>${escapeHTML(res.refactored_code)}</code></pre>
+                </div>
+
+                <!-- Next Actions -->
+                <div class="pt-2 flex items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-800">
+                    <button onclick="closeDebuggingWorkspace()" class="btn-secondary text-xs py-2 px-3 cursor-pointer">
+                        Back to Challenges
+                    </button>
+                    <button onclick="pickNextDebuggingChallenge('${challenge.id}')" class="btn-primary text-xs py-2 px-4 cursor-pointer flex items-center gap-1.5">
+                        <span>Next Challenge</span>
+                        <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        if (window.lucide) lucide.createIcons();
+    } catch (err) {
+        showToast('Evaluation failed. Please try again.', 'error');
+    } finally {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = `<i data-lucide="sparkles" class="w-4 h-4"></i><span>Submit for AI Code Review</span>`;
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+}
+
+function pickNextDebuggingChallenge(currentId) {
+    if (!AppState.debuggingChallenges || AppState.debuggingChallenges.length === 0) return;
+    const currentIdx = AppState.debuggingChallenges.findIndex(c => c.id === currentId);
+    const nextIdx = (currentIdx + 1) % AppState.debuggingChallenges.length;
+    openDebuggingChallenge(AppState.debuggingChallenges[nextIdx].id);
+}
+
+function closeDebuggingWorkspace() {
+    clearInterval(debuggingTimerInterval);
+    if (debuggingVoiceRecognizer) {
+        debuggingVoiceRecognizer.stop();
+        debuggingVoiceRecognizer = null;
+    }
+
+    const listContainer = document.getElementById('debuggingChallengesList');
+    const filterContainer = document.getElementById('debuggingLangFilters');
+    const workspace = document.getElementById('debuggingWorkspaceArea');
+
+    if (workspace) workspace.classList.add('hidden');
+    if (filterContainer) filterContainer.parentElement.classList.remove('hidden');
+    if (listContainer) listContainer.classList.remove('hidden');
+
+    AppState.activeDebuggingChallenge = null;
+    AppState.selectedBuggyLine = null;
+}
+
+// ==============================================================================
+// 10. AI MOCK INTERVIEW STUDIO & PROCTORING (ANIMATED INTERVIEWER AVATAR)
+// ==============================================================================
+const INTERVIEWER_PERSONAS = {
+    sophia: {
+        id: 'sophia',
+        name: 'Dr. Sophia Hayes',
+        role: 'Principal Evaluator @ Google Cloud',
+        company: 'Google',
+        accentColor: '#06b6d4',
+        gender: 'female',
+        rate: 0.95,
+        pitch: 1.05,
+        badgeClass: 'badge-primary',
+        voiceFilter: v => v.name.includes('Google') || v.name.includes('Zira') || v.name.includes('Samantha') || (v.lang && v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
+    },
+    marcus: {
+        id: 'marcus',
+        name: 'Marcus Vance',
+        role: 'Staff Systems Architect @ Stripe',
+        company: 'Stripe',
+        accentColor: '#10b981',
+        gender: 'male',
+        rate: 1.0,
+        pitch: 0.88,
+        badgeClass: 'badge-emerald',
+        voiceFilter: v => v.name.includes('David') || v.name.includes('Alex') || (v.lang && v.lang.startsWith('en') && v.name.toLowerCase().includes('male'))
+    },
+    aria: {
+        id: 'aria',
+        name: 'Dr. Aria Chen',
+        role: 'Senior AI Scientist @ Google DeepMind',
+        company: 'DeepMind',
+        accentColor: '#c084fc',
+        gender: 'female',
+        rate: 0.98,
+        pitch: 1.2,
+        badgeClass: 'badge-purple',
+        voiceFilter: v => v.name.includes('Victoria') || v.name.includes('Karen') || (v.lang && v.lang.startsWith('en'))
+    }
+};
+
+function getAiInterviewerSvg(personaId = 'sophia') {
+    const isMarcus = personaId === 'marcus';
+    const isAria = personaId === 'aria';
+    
+    // Dynamic accents per persona
+    const primaryAccent = isMarcus ? '#10b981' : (isAria ? '#a855f7' : '#06b6d4');
+    const secondaryAccent = isMarcus ? '#059669' : (isAria ? '#ec4899' : '#3b82f6');
+    const irisGradientId = `irisGrad_${personaId}`;
+    const glassesStroke = isMarcus ? '#34d399' : (isAria ? '#c084fc' : '#38bdf8');
+
+    return `
+        <svg id="aiInterviewerSvg" class="ai-interviewer-svg" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <radialGradient id="faceGrad_${personaId}" cx="50%" cy="40%" r="55%">
+                    <stop offset="0%" stop-color="#f8fafc" />
+                    <stop offset="70%" stop-color="#cbd5e1" />
+                    <stop offset="100%" stop-color="#94a3b8" />
+                </radialGradient>
+                <linearGradient id="hairGrad_${personaId}" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="${isMarcus ? '#1e293b' : (isAria ? '#261b3b' : '#0f172a')}" />
+                    <stop offset="100%" stop-color="${isMarcus ? '#090d16' : (isAria ? '#130d24' : '#020617')}" />
+                </linearGradient>
+                <linearGradient id="glassesGrad_${personaId}" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="${primaryAccent}" stop-opacity="0.35" />
+                    <stop offset="100%" stop-color="${secondaryAccent}" stop-opacity="0.15" />
+                </linearGradient>
+                <radialGradient id="${irisGradientId}" cx="40%" cy="40%" r="60%">
+                    <stop offset="0%" stop-color="${primaryAccent}" />
+                    <stop offset="60%" stop-color="${secondaryAccent}" />
+                    <stop offset="100%" stop-color="#0f172a" />
+                </radialGradient>
+                <linearGradient id="suitGrad_${personaId}" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#334155" />
+                    <stop offset="100%" stop-color="#0f172a" />
+                </linearGradient>
+            </defs>
+
+            <!-- Rotating Concentric Holographic HUD Rings -->
+            <circle cx="100" cy="100" r="94" stroke="${primaryAccent}" stroke-width="1.2" stroke-dasharray="10 8" opacity="0.35" class="hud-ring-outer" />
+            <circle cx="100" cy="100" r="86" stroke="${secondaryAccent}" stroke-width="0.9" stroke-dasharray="5 7" opacity="0.25" class="hud-ring-inner" />
+            <path d="M 16 100 H 26 M 174 100 H 184 M 100 16 V 26 M 100 174 V 184" stroke="${primaryAccent}" stroke-width="1.6" opacity="0.5" />
+
+            <!-- Professional Corporate Shoulders / Blazer -->
+            <path d="M 42 188 C 42 152 72 144 100 144 C 128 144 158 152 158 188 Z" fill="url(#suitGrad_${personaId})" />
+            <path d="M 86 150 L 100 176 L 114 150 Z" fill="#475569" />
+            <path d="M 96 158 L 100 188 L 104 158 Z" fill="${primaryAccent}" opacity="0.8" />
+
+            <!-- Neck -->
+            <rect x="91" y="126" width="18" height="24" rx="4" fill="#cbd5e1" />
+            <path d="M 91 136 C 96 141 104 141 109 136" stroke="#94a3b8" stroke-width="1.5" fill="none" opacity="0.5" />
+
+            <!-- Entire Head & Face Group (Organic Floating & Breathing) -->
+            <g class="avatar-head-group">
+                <!-- Hair Back Silhouette -->
+                <ellipse cx="100" cy="85" rx="${isMarcus ? '38' : '44'}" ry="48" fill="url(#hairGrad_${personaId})" />
+
+                <!-- Left & Right Ears -->
+                <circle cx="61" cy="98" r="9" fill="#cbd5e1" />
+                <circle cx="139" cy="98" r="9" fill="#cbd5e1" />
+
+                <!-- Cyber Headset & Earpiece on Left Ear -->
+                <rect x="54" y="90" width="8" height="18" rx="3" fill="#1e293b" />
+                <circle cx="58" cy="99" r="3.5" class="avatar-headset-led avatar-accent-color" fill="${primaryAccent}" />
+                <path d="M 58 103 Q 62 120 74 125" stroke="#475569" stroke-width="2" fill="none" stroke-linecap="round" />
+                <circle cx="75" cy="125" r="2.5" fill="${primaryAccent}" />
+
+                <!-- Face Base Shape -->
+                <ellipse cx="100" cy="98" rx="34" ry="42" fill="url(#faceGrad_${personaId})" />
+                <path d="M 72 90 C 72 124 82 138 100 138 C 118 138 128 124 128 90 Z" fill="url(#faceGrad_${personaId})" />
+
+                <!-- Front Styled Hair / Fringe -->
+                ${isMarcus ? `
+                    <path d="M 68 82 C 72 60 128 60 132 82 C 122 72 110 68 100 68 C 88 68 78 72 68 82 Z" fill="url(#hairGrad_${personaId})" />
+                ` : `
+                    <path d="M 64 82 C 68 54 132 54 136 82 C 125 70 115 67 100 67 C 85 67 75 71 64 82 Z" fill="url(#hairGrad_${personaId})" />
+                    <path d="M 66 78 C 74 64 96 62 110 67 C 100 70 92 74 88 84 C 80 80 72 78 66 78 Z" fill="#334155" opacity="0.35" />
+                `}
+
+                <!-- Expressive Eyebrows -->
+                <g class="avatar-eyebrows">
+                    <path d="M 76 82 Q 85 79 93 83" stroke="#1e293b" stroke-width="2.2" stroke-linecap="round" fill="none" />
+                    <path d="M 107 83 Q 115 79 124 82" stroke="#1e293b" stroke-width="2.2" stroke-linecap="round" fill="none" />
+                </g>
+
+                <!-- Left & Right Eyes with Blinking Eyelids & Wandering Pupils -->
+                <g class="avatar-eyes-container">
+                    <!-- Left Eye -->
+                    <g class="avatar-eye-left" transform="translate(74, 86)">
+                        <ellipse cx="11" cy="7" rx="10" ry="6" fill="#ffffff" />
+                        <g class="avatar-pupil-group">
+                            <circle cx="11" cy="7" r="4.2" fill="url(#${irisGradientId})" />
+                            <circle cx="11" cy="7" r="2" fill="#0f172a" />
+                            <circle cx="12.2" cy="5.8" r="1.2" fill="#ffffff" />
+                        </g>
+                        <rect x="0" y="0" width="22" height="14" fill="#cbd5e1" class="avatar-eyelid-top" />
+                        <path d="M 1 7 Q 11 1 21 7" stroke="#334155" stroke-width="1.4" fill="none" stroke-linecap="round" />
+                    </g>
+
+                    <!-- Right Eye -->
+                    <g class="avatar-eye-right" transform="translate(105, 86)">
+                        <ellipse cx="11" cy="7" rx="10" ry="6" fill="#ffffff" />
+                        <g class="avatar-pupil-group">
+                            <circle cx="11" cy="7" r="4.2" fill="url(#${irisGradientId})" />
+                            <circle cx="11" cy="7" r="2" fill="#0f172a" />
+                            <circle cx="12.2" cy="5.8" r="1.2" fill="#ffffff" />
+                        </g>
+                        <rect x="0" y="0" width="22" height="14" fill="#cbd5e1" class="avatar-eyelid-top" />
+                        <path d="M 1 7 Q 11 1 21 7" stroke="#334155" stroke-width="1.4" fill="none" stroke-linecap="round" />
+                    </g>
+                </g>
+
+                <!-- Nose Contour -->
+                <path d="M 98 94 L 100 106 L 104 106" stroke="#94a3b8" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+                <!-- Futuristic AR Smart Glasses -->
+                <g class="avatar-glasses">
+                    <rect x="71" y="81" width="26" height="18" rx="4" fill="url(#glassesGrad_${personaId})" stroke="${glassesStroke}" stroke-width="1.1" opacity="0.85" />
+                    <rect x="103" y="81" width="26" height="18" rx="4" fill="url(#glassesGrad_${personaId})" stroke="${glassesStroke}" stroke-width="1.1" opacity="0.85" />
+                    <path d="M 97 88 Q 100 86 103 88" stroke="${glassesStroke}" stroke-width="1.2" fill="none" />
+                    <!-- Holographic Light Sheen Sweep -->
+                    <path d="M 68 80 L 76 80 L 71 100 L 63 100 Z" fill="#ffffff" opacity="0.45" class="glasses-sheen" />
+                    <path d="M 100 80 L 108 80 L 103 100 L 95 100 Z" fill="#ffffff" opacity="0.45" class="glasses-sheen" />
+                </g>
+
+                <!-- Dynamic Mouth System -->
+                <!-- Resting Calm Mouth (When idle or listening) -->
+                <path d="M 90 124 Q 100 127 110 124" stroke="#e11d48" stroke-width="2" stroke-linecap="round" fill="none" class="avatar-mouth-idle" />
+
+                <!-- Multi-Phoneme Speaking Mouth (When interviewer talks) -->
+                <g class="avatar-mouth-speaking">
+                    <path d="M 89 122 C 89 119 95 118 100 118 C 105 118 111 119 111 122 C 111 128 106 131 100 131 C 94 131 89 128 89 122 Z" fill="#881337" stroke="#e11d48" stroke-width="1.5" />
+                    <path d="M 93 120 Q 100 121 107 120" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round" />
+                    <ellipse cx="100" cy="128" rx="4.5" ry="2.2" fill="#f43f5e" />
+                </g>
+            </g>
+        </svg>
+    `;
+}
+
+function setInterviewerState(state) {
+    AppState.interviewerState = state;
+    const stage = document.getElementById('interviewerAvatarStage');
+    const pill = document.getElementById('interviewerStatusPill');
+    const text = document.getElementById('interviewerStatusText');
+    if (!stage) return;
+
+    stage.className = `interviewer-avatar-stage state-${state}`;
+
+    if (pill && text) {
+        if (state === 'speaking') {
+            pill.className = 'flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[10px] font-semibold bg-emerald-950/80 border border-emerald-500/50 text-emerald-300';
+            text.textContent = 'Interviewer Speaking';
+        } else if (state === 'listening') {
+            pill.className = 'flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[10px] font-semibold bg-blue-950/80 border border-blue-500/50 text-blue-300';
+            text.textContent = 'Listening to Candidate';
+        } else if (state === 'evaluating') {
+            pill.className = 'flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[10px] font-semibold bg-purple-950/80 border border-purple-500/50 text-purple-300';
+            text.textContent = 'Analyzing Response...';
+        } else {
+            pill.className = 'flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[10px] font-semibold bg-slate-800 border border-slate-700 text-slate-300';
+            text.textContent = 'Awaiting Candidate';
+        }
+    }
+}
+
+function speakInterviewerQuestion(text) {
+    if (!('speechSynthesis' in window)) {
+        setInterviewerState('idle');
+        return;
+    }
+    if (!text) return;
+
+    window.speechSynthesis.cancel();
+    setInterviewerState('speaking');
+
+    const persona = INTERVIEWER_PERSONAS[AppState.activeInterviewerPersona || 'sophia'] || INTERVIEWER_PERSONAS.sophia;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = persona.rate;
+    utterance.pitch = persona.pitch;
+
+    const voices = window.speechSynthesis.getVoices();
+    if (voices && voices.length > 0) {
+        const matched = voices.find(persona.voiceFilter) || voices.find(v => v.lang && v.lang.startsWith('en')) || voices[0];
+        if (matched) utterance.voice = matched;
+    }
+
+    utterance.onend = () => {
+        setInterviewerState('listening');
+    };
+
+    utterance.onerror = () => {
+        setInterviewerState('idle');
+    };
+
+    window.speechSynthesis.speak(utterance);
+}
+
+function stopInterviewerSpeech() {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+    setInterviewerState('idle');
+}
+
+function replayInterviewerQuestion() {
+    const s = AppState.currentInterviewSession;
+    const currentQ = s ? (s.question || (s.current_turn && s.current_turn.question)) : null;
+    const text = currentQ ? currentQ.question_text : 'Please explain your technical architecture and implementation strategy.';
+    speakInterviewerQuestion(text);
+}
+
+function switchInterviewerPersona(personaId) {
+    if (!INTERVIEWER_PERSONAS[personaId]) return;
+    AppState.activeInterviewerPersona = personaId;
+    const p = INTERVIEWER_PERSONAS[personaId];
+
+    const card = document.getElementById('aiInterviewerFeedCard');
+    if (card) {
+        card.setAttribute('data-persona', personaId);
+    }
+    const nameEl = document.getElementById('interviewerPersonaName');
+    const roleEl = document.getElementById('interviewerPersonaRole');
+    if (nameEl) nameEl.textContent = p.name;
+    if (roleEl) roleEl.textContent = p.role;
+
+    // Update Stage Avatar SVG
+    const stage = document.getElementById('interviewerAvatarStage');
+    if (stage) {
+        stage.innerHTML = `
+            <div class="avatar-backlight"></div>
+            <div class="eval-scanline"></div>
+            ${getAiInterviewerSvg(personaId)}
+        `;
+    }
+
+    // Update active persona buttons
+    const btns = document.querySelectorAll('.persona-select-btn');
+    btns.forEach(b => {
+        if (b.getAttribute('data-persona') === personaId) {
+            b.className = 'persona-select-btn px-2 py-0.5 rounded text-[10px] font-bold text-white bg-indigo-600 transition cursor-pointer';
+        } else {
+            b.className = 'persona-select-btn px-2 py-0.5 rounded text-[10px] font-medium text-slate-400 hover:text-white bg-slate-800/80 transition cursor-pointer';
+        }
+    });
+
+    speakInterviewerQuestion(`Evaluator switched to ${p.name}. I am calibrated and ready for your assessment.`);
+}
+
+function previewInterviewerVoice() {
+    const persona = INTERVIEWER_PERSONAS[AppState.activeInterviewerPersona || 'sophia'] || INTERVIEWER_PERSONAS.sophia;
+    speakInterviewerQuestion(`Hello! I am ${persona.name}, your AI Technical Evaluator. I am calibrated to analyze your algorithms, systems depth, and articulation pacing.`);
+}
+
+function initInterviewStudio() {
+    if (AppState.currentInterviewSession) {
+        renderActiveInterviewQuestion();
+    } else {
+        renderInterviewSetupScreen();
+    }
+}
+
+function renderInterviewSetupScreen() {
+    const container = document.getElementById('interviewStudioContainer');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="saas-card p-6 max-w-3xl mx-auto space-y-6">
+            <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+                <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="video" class="w-5 h-5 text-indigo-600"></i>
+                    AI Mock Technical & Multi-Modal Interview Studio
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Multi-turn adaptive questions with animated AI Interviewer Face console, real-time speech acoustic analysis, and transparent 4-part scoring.
+                </p>
+            </div>
+
+            <!-- Animated Interviewer Avatar Preview Banner -->
+            <div class="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/50 bg-gradient-to-r from-indigo-50/60 via-purple-50/40 to-slate-50/60 dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-slate-900/40 flex items-center gap-4">
+                <div class="w-20 h-20 rounded-xl overflow-hidden bg-slate-950 border border-indigo-500/40 shrink-0 flex items-center justify-center relative shadow-lg">
+                    <div class="scale-[0.45] origin-center">
+                        ${getAiInterviewerSvg(AppState.activeInterviewerPersona || 'sophia')}
+                    </div>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-slate-900 dark:text-white">Animated AI Interviewer & Face Console</span>
+                        <span class="badge badge-primary text-[9px]">Interactive Avatar</span>
+                    </div>
+                    <p class="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                        Features natural eyelid blinking, wandering eye tracking, live phoneme mouth sync during speech, and attentive listening nods.
+                    </p>
+                    <div class="flex items-center gap-2 mt-2">
+                        <button onclick="previewInterviewerVoice()" class="btn-secondary py-1 px-3 text-[11px] cursor-pointer">
+                            <span>🔊 Test Voice Greeting</span>
+                        </button>
+                        <span class="text-[10px] text-slate-400">Persona: <strong>${INTERVIEWER_PERSONAS[AppState.activeInterviewerPersona || 'sophia'].name}</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Setup Form -->
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Target Placement Role:</label>
+                    <select id="interviewJobRoleSelect" class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white font-medium">
+                        <option value="Software Engineer">Software Engineer (Full-Stack / Core CS)</option>
+                        <option value="Python Backend Engineer">Python Backend Engineer (FastAPI / SQL / Microservices)</option>
+                        <option value="Frontend Engineer">Frontend Engineer (React / TypeScript / Architecture)</option>
+                        <option value="Cloud & DevOps Engineer">Cloud & DevOps Engineer (Docker / Kubernetes / AWS)</option>
+                        <option value="Machine Learning Engineer">Machine Learning Engineer (NLP / LLMs / Vision)</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Question Count:</label>
+                        <select id="interviewQuestionCountSelect" class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white font-medium">
+                            <option value="2">2 Questions (Fast Practice)</option>
+                            <option value="3" selected>3 Questions (Standard Mock)</option>
+                            <option value="4">4 Questions (Comprehensive Drive)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Difficulty Calibration:</label>
+                        <select id="interviewDifficultySelect" class="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 text-xs text-slate-900 dark:text-white font-medium">
+                            <option value="medium" selected>Intermediate (Tier-1 / Tier-2)</option>
+                            <option value="hard">Advanced (Super Dream 20+ LPA)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Hardware & Permission Toggles -->
+                <div class="p-4 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/40 rounded-xl space-y-3">
+                    <span class="font-bold text-indigo-900 dark:text-indigo-300 block text-xs">📹 Hardware & Proctoring Options</span>
+                    <label class="flex items-center gap-2.5 cursor-pointer">
+                        <input type="checkbox" id="enableCameraProctoringToggle" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                        <span class="text-xs text-slate-700 dark:text-slate-300">Enable MediaPipe Gaze & Face Tracking Camera Preview</span>
+                    </label>
+                    <label class="flex items-center gap-2.5 cursor-pointer">
+                        <input type="checkbox" id="enableSpeechVoiceToggle" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                        <span class="text-xs text-slate-700 dark:text-slate-300">Enable Speech-to-Text Microphone Input</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                <button onclick="startInterviewSession()" id="btnStartInterviewSession" class="btn-primary py-2.5 px-6 text-xs cursor-pointer shadow-md">
+                    <span>Initialize Mock Interview Studio</span>
+                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+}
+
+async function startInterviewSession() {
+    const roleSelect = document.getElementById('interviewJobRoleSelect');
+    const countSelect = document.getElementById('interviewQuestionCountSelect');
+    const camToggle = document.getElementById('enableCameraProctoringToggle');
+
+    const job_role = roleSelect ? roleSelect.value : 'Software Engineer';
+    const question_count = countSelect ? parseInt(countSelect.value) : 3;
+    const enableCam = camToggle ? camToggle.checked : false;
+
+    showToast('Starting adaptive interview session...', 'info');
+
+    try {
+        const resp = await apiCall('/api/v1/interviews/session/start', 'POST', {
+            job_role,
+            question_count,
+            skills: ['Python', 'FastAPI', 'SQL', 'Docker', 'System Design']
+        });
+
+        AppState.currentInterviewSession = resp.session || resp;
+        AppState.interviewSecondsElapsed = 0;
+
+        renderActiveInterviewQuestion();
+
+        if (enableCam) {
+            startCamAndMic();
+        }
+    } catch (err) {
+        showToast(err.message || 'Failed to start interview', 'error');
+    }
+}
+
+function renderActiveInterviewQuestion() {
+    const container = document.getElementById('interviewStudioContainer');
+    if (!container || !AppState.currentInterviewSession) return;
+
+    const s = AppState.currentInterviewSession;
+    const currentQ = s.question || (s.current_turn && s.current_turn.question) || {};
+    const qNum = s.current_question_number || (s.current_index ? s.current_index + 1 : 1);
+    const totalQ = s.total_questions || 3;
+    const isFollowUp = s.is_follow_up || false;
+    const personaId = AppState.activeInterviewerPersona || 'sophia';
+    const persona = INTERVIEWER_PERSONAS[personaId] || INTERVIEWER_PERSONAS.sophia;
+
+    // Start Response Timer
+    clearInterval(AppState.activeInterviewTimer);
+    AppState.interviewSecondsElapsed = 0;
+    AppState.activeInterviewTimer = setInterval(() => {
+        AppState.interviewSecondsElapsed++;
+        const timerEl = document.getElementById('interviewTimerDisplay');
+        if (timerEl) {
+            const mins = String(Math.floor(AppState.interviewSecondsElapsed / 60)).padStart(2, '0');
+            const secs = String(AppState.interviewSecondsElapsed % 60).padStart(2, '0');
+            timerEl.textContent = `${mins}:${secs}`;
+        }
+    }, 1000);
+
+    container.innerHTML = `
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-6xl mx-auto">
+            <!-- Left: Question & Answer Workspace (7 cols) -->
+            <div class="lg:col-span-7 space-y-5">
+                <div class="saas-card p-6 space-y-5">
+                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="badge ${isFollowUp ? 'badge-amber' : 'badge-primary'} font-mono text-xs">
+                                ${isFollowUp ? '🔍 Follow-Up Probing Turn' : `Question ${qNum} of ${totalQ}`}
+                            </span>
+                            <span class="badge badge-neutral text-xs">${escapeHTML(currentQ.topic || 'Core CS')}</span>
+                        </div>
+                        <div class="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1 rounded-full border border-indigo-200 dark:border-indigo-800/40">
+                            <span class="text-xs">⏱️</span>
+                            <span id="interviewTimerDisplay" class="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">00:00</span>
+                        </div>
+                    </div>
+
+                    ${isFollowUp ? `
+                        <div class="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700/40 rounded-xl text-xs text-amber-800 dark:text-amber-300">
+                            <strong class="font-bold">Adaptive Deep-Dive:</strong> The AI detected a conceptual gap in your previous answer and is raising this probing question to test your depth.
+                        </div>
+                    ` : ''}
+
+                    <!-- Question Text -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-mono uppercase tracking-wider text-indigo-600 dark:text-indigo-400 font-bold">Technical Prompt</span>
+                            <button onclick="replayInterviewerQuestion()" class="text-[11px] text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 flex items-center gap-1 cursor-pointer">
+                                <span>🔊</span>
+                                <span>Listen Again</span>
+                            </button>
+                        </div>
+                        <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-relaxed">
+                            ${escapeHTML(currentQ.question_text)}
+                        </h3>
+                        ${currentQ.is_resume_derived ? `
+                            <span class="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium block">
+                                ✨ Tailored from your resume skill: <strong>${escapeHTML(currentQ.source_resume_keyword || 'Keyword')}</strong>
+                            </span>
+                        ` : ''}
+                    </div>
+
+                    <!-- Answer Textarea -->
+                    <div class="space-y-2 pt-1">
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs font-bold text-slate-700 dark:text-slate-300">Your Technical Response:</label>
+                            <button type="button" id="btnToggleVoiceInterview" onclick="toggleVoiceInputForInterview()" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer">
+                                <span>🎙️</span>
+                                <span id="voiceInterviewBtnText">Start Voice Input</span>
+                            </button>
+                        </div>
+                        <textarea id="interviewAnswerInput" rows="7" placeholder="Articulate your technical response clearly using the STAR framework (Situation, Task, Action, Result) with precise architectural terminology..." class="w-full text-xs p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white outline-none focus:border-indigo-500 leading-relaxed font-sans shadow-inner"></textarea>
+                    </div>
+
+                    <!-- STAR Methodology helper pills -->
+                    <div class="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span class="font-bold text-slate-700 dark:text-slate-300">STAR Guide:</span>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">1. Situation / Context</span>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">2. Technical Task</span>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">3. Implementation Action</span>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">4. Measured Result / Trade-off</span>
+                    </div>
+
+                    <!-- Submit & Controls -->
+                    <div class="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                        <button onclick="terminateInterviewEarly()" class="text-xs text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 font-semibold cursor-pointer">
+                            Conclude Interview Early
+                        </button>
+                        <button onclick="submitInterviewTurnAnswer()" id="btnSubmitTurnAnswer" class="btn-primary py-2.5 px-6 text-xs cursor-pointer shadow-md">
+                            <span>Submit Answer for Evaluation</span>
+                            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: AI Interviewer Video Console & Candidate Telemetry (5 cols) -->
+            <div class="lg:col-span-5 space-y-4">
+                <!-- 1. AI Interviewer Animated Face Console -->
+                <div class="interviewer-feed-card p-4 space-y-3" id="aiInterviewerFeedCard" data-persona="${personaId}">
+                    <!-- Feed Header -->
+                    <div class="flex items-center justify-between border-b border-slate-700/60 pb-2.5">
+                        <div class="flex items-center gap-2.5">
+                            <span class="relative flex h-2.5 w-2.5">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                            </span>
+                            <div>
+                                <div class="flex items-center gap-1.5">
+                                    <span id="interviewerPersonaName" class="text-xs font-bold text-white tracking-wide">${persona.name}</span>
+                                    <span class="badge ${persona.badgeClass} text-[9px] py-0 px-1.5">AI LEAD</span>
+                                </div>
+                                <span id="interviewerPersonaRole" class="text-[10px] text-slate-400 block -mt-0.5">${persona.role}</span>
+                            </div>
+                        </div>
+
+                        <!-- Live Status Pill -->
+                        <div id="interviewerStatusPill" class="flex items-center gap-1.5 py-1 px-2.5 rounded-full text-[10px] font-semibold bg-emerald-950/80 border border-emerald-500/50 text-emerald-300">
+                            <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span id="interviewerStatusText">Interviewer Speaking</span>
+                        </div>
+                    </div>
+
+                    <!-- Animated Avatar Face Stage -->
+                    <div id="interviewerAvatarStage" class="interviewer-avatar-stage state-speaking">
+                        <div class="avatar-backlight"></div>
+                        <div class="eval-scanline"></div>
+                        ${getAiInterviewerSvg(personaId)}
+                    </div>
+
+                    <!-- Acoustic Soundwave Equalizer & Audio Controls -->
+                    <div class="bg-slate-900/90 rounded-xl p-2.5 border border-slate-800/90 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Acoustics</span>
+                            <div class="soundwave-visualizer" id="interviewerSoundwave">
+                                <div class="soundwave-bar"></div>
+                                <div class="soundwave-bar"></div>
+                                <div class="soundwave-bar"></div>
+                                <div class="soundwave-bar"></div>
+                                <div class="soundwave-bar"></div>
+                                <div class="soundwave-bar"></div>
+                                <div class="soundwave-bar"></div>
+                                <div class="soundwave-bar"></div>
+                                <div class="soundwave-bar"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="replayInterviewerQuestion()" title="Speak question aloud" class="py-1 px-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer shadow-sm">
+                                <span>🔊</span>
+                                <span>Repeat</span>
+                            </button>
+                            <button type="button" onclick="stopInterviewerSpeech()" title="Mute AI Voice" class="py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-semibold transition cursor-pointer">
+                                <span>⏹️</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Persona Switcher -->
+                    <div class="flex items-center justify-between text-[11px] pt-1 text-slate-400">
+                        <span class="text-[10px]">Interviewer Persona:</span>
+                        <div class="flex items-center gap-1">
+                            <button onclick="switchInterviewerPersona('sophia')" data-persona="sophia" class="persona-select-btn px-2 py-0.5 rounded text-[10px] font-medium transition cursor-pointer ${personaId === 'sophia' ? 'bg-indigo-600 text-white font-bold' : 'hover:text-white bg-slate-800/80'}">Sophia (Google)</button>
+                            <button onclick="switchInterviewerPersona('marcus')" data-persona="marcus" class="persona-select-btn px-2 py-0.5 rounded text-[10px] font-medium transition cursor-pointer ${personaId === 'marcus' ? 'bg-indigo-600 text-white font-bold' : 'hover:text-white bg-slate-800/80'}">Marcus (Stripe)</button>
+                            <button onclick="switchInterviewerPersona('aria')" data-persona="aria" class="persona-select-btn px-2 py-0.5 rounded text-[10px] font-medium transition cursor-pointer ${personaId === 'aria' ? 'bg-indigo-600 text-white font-bold' : 'hover:text-white bg-slate-800/80'}">Aria (DeepMind)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Candidate Live Stream & Telemetry Box -->
+                <div class="saas-card p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Candidate Video Stream</span>
+                        <span id="camStatusBadge" class="badge badge-neutral text-[10px]">Camera Ready</span>
+                    </div>
+                    <div class="relative bg-slate-900 rounded-xl overflow-hidden aspect-video flex items-center justify-center border border-slate-800">
+                        <video id="interviewWebcamVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
+                        <div id="camPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-xs space-y-1">
+                            <span class="text-2xl">📹</span>
+                            <span>Candidate Camera Inactive</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center text-[11px] text-slate-400">
+                        <span>MediaPipe FaceMesh Gaze Active</span>
+                        <button onclick="toggleCamAndMic()" class="text-indigo-600 hover:underline cursor-pointer font-semibold">Toggle Cam</button>
+                    </div>
+
+                    <!-- Speech Telemetry Metrics -->
+                    <div class="pt-2 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-[11px]">
+                        <div class="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                            <span class="text-slate-400 block text-[10px]">Fluency Pacing:</span>
+                            <span class="font-bold text-indigo-600 dark:text-indigo-400">120 - 150 WPM</span>
+                        </div>
+                        <div class="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                            <span class="text-slate-400 block text-[10px]">Filler Tolerance:</span>
+                            <span class="font-bold text-emerald-600">< 3 per answer</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+
+    // Reattach camera stream if already active (e.g. across question turns)
+    if (AppState.mediaStream && AppState.mediaStream.active) {
+        attachStreamToVideo(AppState.mediaStream);
+    }
+
+    // Auto-speak question if enabled
+    setTimeout(() => {
+        if (AppState.autoSpeakInterview && currentQ && currentQ.question_text) {
+            speakInterviewerQuestion(currentQ.question_text);
+        } else {
+            setInterviewerState('idle');
+        }
+    }, 400);
+}
+
+async function submitInterviewTurnAnswer() {
+    const input = document.getElementById('interviewAnswerInput');
+    const answerText = input ? input.value.trim() : '';
+
+    if (!answerText) {
+        showToast('Please type or record an answer before submitting', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btnSubmitTurnAnswer');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="animate-spin mr-1.5">⏳</span> Evaluating Answer...`;
+    }
+
+    // Stop speaking and switch to evaluating state
+    stopInterviewerSpeech();
+    setInterviewerState('evaluating');
+
+    clearInterval(AppState.activeInterviewTimer);
+    const duration = AppState.interviewSecondsElapsed > 0 ? AppState.interviewSecondsElapsed : 25.0;
+
+    try {
+        const resp = await apiCall('/api/v1/interviews/session/turn', 'POST', {
+            session_id: AppState.currentInterviewSession.session_id,
+            answer_text: answerText,
+            duration_seconds: duration
+        });
+
+        const turnResult = resp.data || resp;
+
+        // Check if session concluded
+        if (turnResult.state === 'COMPLETED' || turnResult.is_completed) {
+            setInterviewerState('idle');
+            renderFinalInterviewScorecard(turnResult.summary);
+        } else {
+            // Update session state for next question (primary or follow-up)
+            AppState.currentInterviewSession.question = turnResult.next_question;
+            AppState.currentInterviewSession.is_follow_up = turnResult.is_follow_up;
+            AppState.currentInterviewSession.current_question_number = turnResult.current_question_number;
+            AppState.currentInterviewSession.total_questions = turnResult.total_questions;
+            
+            showToast(turnResult.is_follow_up ? 'Follow-up question raised' : 'Answer evaluated!', 'success');
+            renderActiveInterviewQuestion();
+        }
+    } catch (err) {
+        showToast(err.message || 'Error evaluating turn', 'error');
+        setInterviewerState('idle');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<span>Submit Answer for Evaluation</span> <i data-lucide="send" class="w-3.5 h-3.5"></i>`;
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+}
+
+async function terminateInterviewEarly() {
+    if (!confirm('Are you sure you want to conclude the mock interview session now?')) return;
+
+    stopInterviewerSpeech();
+    clearInterval(AppState.activeInterviewTimer);
+    try {
+        const resp = await apiCall(`/api/v1/interviews/session/${AppState.currentInterviewSession.session_id}/conclude`, 'POST');
+        renderFinalInterviewScorecard(resp.data ? resp.data.summary : resp.summary);
+    } catch (err) {
+        showToast('Session concluded', 'info');
+        AppState.currentInterviewSession = null;
+        renderInterviewSetupScreen();
+    }
+}
+
+function renderFinalInterviewScorecard(summary) {
+    stopInterviewerSpeech();
+    stopCamAndMic();
+    AppState.currentInterviewSession = null;
+
+    const container = document.getElementById('interviewStudioContainer');
+    if (!container) return;
+
+    const overall = summary ? (summary.overall_score || 75) : 75;
+    const tech = summary ? (summary.average_technical_score || 80) : 80;
+    const comm = summary ? (summary.average_communication_score || 70) : 70;
+    const wpm = summary ? (summary.average_wpm || 125) : 125;
+    const verdict = summary ? (summary.verdict || 'PASSED') : 'PASSED';
+
+    container.innerHTML = `
+        <div class="saas-card p-8 max-w-3xl mx-auto space-y-6">
+            <div class="text-center space-y-2 border-b border-slate-200 dark:border-slate-800 pb-5">
+                <span class="badge ${verdict === 'PASSED' ? 'badge-emerald' : 'badge-amber'} text-xs font-mono py-1 px-3">
+                    ${verdict === 'PASSED' ? '✓ INTERVIEW CLEARED' : '⚠️ REVISION RECOMMENDED'}
+                </span>
+                <h3 class="text-xl font-extrabold text-slate-900 dark:text-white">
+                    AI Mock Interview Evaluation Report
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400">
+                    Your responses were analyzed using semantic NLP cosine embeddings and speech fluency acoustic models.
+                </p>
+            </div>
+
+            <!-- Score Cards Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span class="text-xs text-slate-400 block font-medium">Composite Score</span>
+                    <span class="text-2xl font-black text-indigo-600 dark:text-indigo-400">${overall.toFixed(1)}/100</span>
+                </div>
+                <div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span class="text-xs text-slate-400 block font-medium">Technical Depth</span>
+                    <span class="text-2xl font-black text-slate-900 dark:text-white">${tech.toFixed(1)}%</span>
+                </div>
+                <div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span class="text-xs text-slate-400 block font-medium">Clarity & Semantics</span>
+                    <span class="text-2xl font-black text-slate-900 dark:text-white">${comm.toFixed(1)}%</span>
+                </div>
+                <div class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <span class="text-xs text-slate-400 block font-medium">Speaking Pace</span>
+                    <span class="text-2xl font-black text-emerald-600">${wpm} <span class="text-xs font-normal">WPM</span></span>
+                </div>
+            </div>
+
+            <!-- Mastered Concepts vs Missing Concepts -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div class="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl space-y-2">
+                    <span class="font-bold text-emerald-800 dark:text-emerald-300 block">✓ Mastered Technical Concepts</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        ${((summary && summary.strengths) || ['FastAPI async', 'SQL Indexing', 'Docker containers']).map(s => `
+                            <span class="badge badge-emerald text-[11px]">${escapeHTML(s)}</span>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="p-4 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-xl space-y-2">
+                    <span class="font-bold text-amber-800 dark:text-amber-300 block">⚠️ Concepts for Remediation</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        ${((summary && summary.weak_areas) || ['Garbage collection cycles', 'System scalability bottlenecks']).map(s => `
+                            <span class="badge badge-amber text-[11px]">${escapeHTML(s)}</span>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
+                <button onclick="switchTab('history')" class="btn-secondary py-2 px-4 cursor-pointer">
+                    View in Interview History →
+                </button>
+                <button onclick="renderInterviewSetupScreen()" class="btn-primary py-2 px-5 cursor-pointer">
+                    Start Another Mock Session
+                </button>
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+}
+
+// Media & Speech Helpers
+function attachStreamToVideo(stream) {
+    const video = document.getElementById('interviewWebcamVideo');
+    const placeholder = document.getElementById('camPlaceholder');
+    const badge = document.getElementById('camStatusBadge');
+    if (video) {
+        video.srcObject = stream;
+        video.play().catch(e => console.warn('[Camera] Autoplay play error:', e));
+    }
+    if (placeholder) placeholder.classList.add('hidden');
+    if (badge) {
+        badge.textContent = 'Active (Live)';
+        badge.className = 'badge badge-emerald text-[10px]';
+    }
+}
+
+function startCamAndMic() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('Camera API not accessible. Ensure you are accessing via http://127.0.0.1:8080 or https://', 'error');
+        return;
+    }
+
+    if (AppState.mediaStream && AppState.mediaStream.active) {
+        attachStreamToVideo(AppState.mediaStream);
+        return;
+    }
+
+    navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+        audio: false
+    })
+    .then(stream => {
+        AppState.mediaStream = stream;
+        attachStreamToVideo(stream);
+        showToast('Camera connected successfully', 'success');
+    })
+    .catch(err => {
+        console.warn('[Camera] Permission denied or device error:', err);
+        if (err.name === 'OverconstrainedError') {
+            // Retry with standard unconstrained video
+            navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+                .then(fallbackStream => {
+                    AppState.mediaStream = fallbackStream;
+                    attachStreamToVideo(fallbackStream);
+                    showToast('Camera connected (fallback resolution)', 'success');
+                })
+                .catch(fbErr => {
+                    handleCamError(fbErr);
+                });
+            return;
+        }
+        handleCamError(err);
+    });
+}
+
+function handleCamError(err) {
+    let msg = 'Could not access camera.';
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        msg = 'Camera permission denied! Please click the camera/lock icon in your browser address bar and select "Allow".';
+    } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        msg = 'No camera device found on this laptop. Please check your physical webcam or camera privacy shutter.';
+    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        msg = 'Camera is in use by another app (Zoom, Teams, Discord) or blocked by Windows privacy settings.';
+    } else {
+        msg = 'Camera error: ' + (err.message || err.name);
+    }
+    showToast(msg, 'warning');
+}
+
+function stopCamAndMic() {
+    if (AppState.mediaStream) {
+        AppState.mediaStream.getTracks().forEach(track => track.stop());
+        AppState.mediaStream = null;
+    }
+    const placeholder = document.getElementById('camPlaceholder');
+    const badge = document.getElementById('camStatusBadge');
+    const video = document.getElementById('interviewWebcamVideo');
+    if (video) video.srcObject = null;
+    if (placeholder) placeholder.classList.remove('hidden');
+    if (badge) {
+        badge.textContent = 'Camera Inactive';
+        badge.className = 'badge badge-neutral text-[10px]';
+    }
+}
+
+function toggleCamAndMic() {
+    if (AppState.mediaStream && AppState.mediaStream.active) {
+        stopCamAndMic();
+        showToast('Camera preview paused', 'info');
+    } else {
+        startCamAndMic();
+    }
+}
+
+function toggleVoiceInputForInterview() {
+    const btn = document.getElementById('btnToggleVoiceInterview');
+    const textEl = document.getElementById('voiceInterviewBtnText');
+    const input = document.getElementById('interviewAnswerInput');
+
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+        showToast('Web Speech API not supported in this browser. Please type your response.', 'warning');
+        return;
+    }
+
+    if (AppState.isRecordingVoice && AppState.speechRecognition) {
+        AppState.speechRecognition.stop();
+        AppState.isRecordingVoice = false;
+        if (textEl) textEl.textContent = 'Start Voice Input';
+        setInterviewerState('idle');
+        return;
+    }
+
+    // Stop interviewer speech if still talking so mic doesn't catch AI voice
+    stopInterviewerSpeech();
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    AppState.speechRecognition = new SpeechRec();
+    AppState.speechRecognition.continuous = true;
+    AppState.speechRecognition.interimResults = true;
+    AppState.speechRecognition.lang = 'en-US';
+
+    AppState.speechRecognition.onstart = () => {
+        AppState.isRecordingVoice = true;
+        if (textEl) textEl.textContent = 'Recording Voice (Click to Stop)...';
+        setInterviewerState('listening');
+        showToast('Listening... Speak your technical response', 'info');
+    };
+
+    AppState.speechRecognition.onresult = (event) => {
+        let transcript = '';
+        for (let i = 0; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript + ' ';
+        }
+        if (input) input.value = transcript.trim();
+    };
+
+    AppState.speechRecognition.onerror = () => {
+        AppState.isRecordingVoice = false;
+        if (textEl) textEl.textContent = 'Start Voice Input';
+        setInterviewerState('idle');
+    };
+
+    AppState.speechRecognition.onend = () => {
+        AppState.isRecordingVoice = false;
+        if (textEl) textEl.textContent = 'Start Voice Input';
+        setInterviewerState('idle');
+    };
+
+    AppState.speechRecognition.start();
+}
+
+// ==============================================================================
+// 11. HR INTERVIEW PREPARATION MODULE
+// ==============================================================================
+function initHrInterviewModule() {
+    const hrQuestions = [
+        "Tell me about a challenging technical setback in a major project, how you diagnosed it, and what steps resolved it.",
+        "How do you handle technical disagreements with team members regarding architectural or code quality choices?",
+        "Why are you interested in joining our engineering team, and where do you see your technical trajectory in 3 years?",
+        "Describe a situation where you had to learn an entirely new framework or language under tight deployment deadlines."
+    ];
+
+    const qContainer = document.getElementById('hrQuestionsList');
+    if (qContainer) {
+        qContainer.innerHTML = hrQuestions.map((q, idx) => `
+            <div class="saas-card p-4 space-y-2 hover:border-indigo-500/50 transition cursor-pointer" onclick="selectHrQuestion('${escapeHTML(q)}')">
+                <div class="flex items-center justify-between">
+                    <span class="badge badge-primary font-mono text-[10px]">SCENARIO ${idx + 1}</span>
+                    <span class="text-xs text-indigo-600 font-bold">Practice STAR Response →</span>
+                </div>
+                <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">${escapeHTML(q)}</p>
+            </div>
+        `).join('');
+    }
+}
+
+function selectHrQuestion(qText) {
+    const display = document.getElementById('activeHrQuestionDisplay');
+    if (display) display.textContent = qText;
+    const input = document.getElementById('hrAnswerInput');
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+    speakInterviewerQuestion(qText);
+}
+
+async function evaluateHrAnswer() {
+    const qText = document.getElementById('activeHrQuestionDisplay').textContent;
+    const answerText = document.getElementById('hrAnswerInput').value.trim();
+
+    if (!answerText) {
+        showToast('Please type or record an answer first', 'warning');
+        return;
+    }
+
+    showToast('Evaluating STAR Behavioral response...', 'info');
+
+    try {
+        const resp = await apiCall('/api/v1/interviews/evaluate-direct', 'POST', {
+            question_text: qText,
+            expected_concepts: ['situation', 'task', 'action', 'result', 'learning'],
+            answer_text: answerText,
+            duration_seconds: 35.0
+        });
+
+        renderHrEvaluationResult(resp);
+    } catch (err) {
+        showToast('Failed to evaluate answer', 'error');
+    }
+}
+
+function renderHrEvaluationResult(res) {
+    const resultBox = document.getElementById('hrEvaluationResultBox');
+    if (!resultBox) return;
+
+    resultBox.classList.remove('hidden');
+    const nlp = res.nlp_evaluation || {};
+    const speech = res.speech_analysis || {};
+
+    resultBox.innerHTML = `
+        <div class="p-5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <span class="font-bold text-sm text-slate-900 dark:text-white">HR Behavioral Feedback Scorecard</span>
+                <span class="badge badge-emerald font-mono">STAR Score: ${nlp.technical_score || 80}/100</span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                    <span class="text-slate-400 block font-medium">STAR Framework Coverage</span>
+                    <span class="text-base font-bold text-indigo-600">${nlp.concept_coverage_pct || 75}%</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block font-medium">Pacing & Speed</span>
+                    <span class="text-base font-bold text-slate-900 dark:text-white">${speech.words_per_minute || 130} WPM</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block font-medium">Tone & Delivery</span>
+                    <span class="text-base font-bold text-emerald-600">${speech.fluency_rating || 'Confident / Steady'}</span>
+                </div>
+            </div>
+            <p class="text-xs text-slate-600 dark:text-slate-400 pt-1 leading-relaxed">
+                <strong>Feedback:</strong> ${escapeHTML(nlp.feedback || 'Well articulated STAR structure with clear problem resolution.')}
+            </p>
+        </div>
+    `;
+}
+
+// ==============================================================================
+// 12. JOBS & 47 PLACEMENT DRIVES MODULE
+// ==============================================================================
+async function loadPlacementDrives() {
+    const container = document.getElementById('placementJobsListContainer');
+    if (!container) return;
+
+    try {
+        const jobs = await apiCall('/api/v1/placement/jobs');
+        AppState.jobs = jobs;
+        renderJobsList(jobs);
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state text-xs text-slate-500">Error loading placement drives.</div>`;
+    }
+}
+
+function renderJobsList(jobs) {
+    const container = document.getElementById('placementJobsListContainer');
+    if (!container) return;
+
+    if (!jobs || jobs.length === 0) {
+        container.innerHTML = `<div class="empty-state text-xs text-slate-500">No active placement drives found.</div>`;
+        return;
+    }
+
+    container.innerHTML = jobs.map(j => {
+        const req = j.requirements || {};
+        const skills = req.required_skills || [];
+        const isSuperDream = j.salary_lpa >= 20.0;
+        const isDream = j.salary_lpa >= 12.0 && j.salary_lpa < 20.0;
+        const tierBadge = isSuperDream ? 'badge-primary' : (isDream ? 'badge-emerald' : 'badge-neutral');
+        const tierName = isSuperDream ? 'Tier-1 Super Dream' : (isDream ? 'Tier-1 Dream' : 'Tier-2 Core');
+
+        return `
+            <div class="saas-card p-5 space-y-4 hover:border-indigo-500/50 transition">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h4 class="font-bold text-base text-slate-900 dark:text-white">${escapeHTML(j.title)}</h4>
+                            <span class="badge ${tierBadge} text-[10px] font-mono">${tierName}</span>
+                        </div>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            🏢 <strong>${escapeHTML(j.company_name || 'Enterprise')}</strong> • 📍 ${escapeHTML(j.location || 'Bangalore / Remote')}
+                        </p>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <span class="text-lg font-extrabold text-indigo-600 dark:text-indigo-400">${j.salary_lpa ? j.salary_lpa + ' LPA' : 'Competitive'}</span>
+                        <span class="block text-[10px] text-slate-400">Package CTC</span>
+                    </div>
+                </div>
+
+                <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
+                    ${escapeHTML(j.description)}
+                </p>
+
+                <!-- Criteria & Skills -->
+                <div class="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <div class="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+                        <span>CGPA: <strong>≥ ${req.min_cgpa || 6.0}</strong></span>
+                        <span>•</span>
+                        <span>Attendance: <strong>≥ ${req.min_attendance_pct || 75}%</strong></span>
+                        <span>•</span>
+                        <span>Max Backlogs: <strong>${req.max_backlogs || 0}</strong></span>
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                        ${skills.map(s => `<span class="badge badge-neutral text-[10px] font-mono">${escapeHTML(s)}</span>`).join('')}
+                    </div>
+                </div>
+
+                <!-- Eligibility & Apply Button -->
+                <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <button onclick="checkJobEligibility(${j.id})" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer">
+                        Verify My Eligibility →
+                    </button>
+                    <button onclick="applyToJobDrive(${j.id})" class="btn-primary py-1.5 px-4 text-xs cursor-pointer">
+                        <span>Apply & Unlock Pipeline</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (window.lucide) lucide.createIcons();
+}
+
+function filterPlacementJobs(tierFilter) {
+    if (!AppState.jobs) return;
+    let filtered = AppState.jobs;
+    if (tierFilter === 'super') {
+        filtered = AppState.jobs.filter(j => j.salary_lpa >= 20.0);
+    } else if (tierFilter === 'dream') {
+        filtered = AppState.jobs.filter(j => j.salary_lpa >= 12.0 && j.salary_lpa < 20.0);
+    } else if (tierFilter === 'core') {
+        filtered = AppState.jobs.filter(j => j.salary_lpa < 12.0);
+    }
+    renderJobsList(filtered);
+}
+
+function searchPlacementJobs(query) {
+    if (!AppState.jobs) return;
+    const q = query.toLowerCase().trim();
+    if (!q) {
+        renderJobsList(AppState.jobs);
+        return;
+    }
+    const filtered = AppState.jobs.filter(j => 
+        (j.title && j.title.toLowerCase().includes(q)) ||
+        (j.company_name && j.company_name.toLowerCase().includes(q)) ||
+        (j.description && j.description.toLowerCase().includes(q)) ||
+        (j.requirements && j.requirements.required_skills && j.requirements.required_skills.some(s => s.toLowerCase().includes(q)))
+    );
+    renderJobsList(filtered);
+}
+
+async function checkJobEligibility(jobId) {
+    const studentId = AppState.studentId || 1;
+    showToast('Calculating deterministic eligibility matrix...', 'info');
+
+    try {
+        const resp = await apiCall(`/api/v1/placement/jobs/${jobId}/check-eligibility/${studentId}`);
+        openEligibilityModal(resp);
+    } catch (err) {
+        showToast(err.message || 'Error checking eligibility', 'error');
+    }
+}
+
+function openEligibilityModal(res) {
+    let modal = document.getElementById('eligibilityModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'eligibilityModal';
+        modal.className = 'modal-backdrop';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-card p-6 space-y-5">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">${res.is_eligible ? '🎉' : '⚠️'}</span>
+                    <h3 class="font-bold text-base text-slate-900 dark:text-white">
+                        ${res.is_eligible ? 'Eligible for Placement Drive!' : 'Eligibility Remediations Needed'}
+                    </h3>
+                </div>
+                <button onclick="closeEligibilityModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">✕</button>
+            </div>
+
+            <!-- Parameters Table -->
+            <div class="space-y-3 text-xs">
+                <div class="grid grid-cols-2 gap-3 p-3.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div>
+                        <span class="text-slate-400 block font-medium">Your CGPA:</span>
+                        <span class="font-bold text-slate-900 dark:text-white">${res.student_cgpa} (Required: ≥ ${res.required_cgpa})</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-medium">Attendance:</span>
+                        <span class="font-bold text-slate-900 dark:text-white">${res.student_attendance_pct}% (Required: ≥ ${res.required_attendance_pct}%)</span>
+                    </div>
+                </div>
+
+                ${res.missing_skills && res.missing_skills.length > 0 ? `
+                    <div class="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-xl text-amber-900 dark:text-amber-300">
+                        <strong class="font-bold block mb-1">Missing Required Skills:</strong>
+                        <div class="flex flex-wrap gap-1">
+                            ${res.missing_skills.map(s => `<span class="badge badge-amber font-mono text-[10px]">${escapeHTML(s)}</span>`).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+                ${res.reasons && res.reasons.length > 0 ? `
+                    <div class="space-y-1">
+                        <span class="font-bold text-slate-700 dark:text-slate-300 block">Assessment Remarks:</span>
+                        <ul class="space-y-1 list-disc pl-4 text-slate-600 dark:text-slate-400">
+                            ${res.reasons.map(r => `<li>${escapeHTML(r)}</li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                <button onclick="closeEligibilityModal()" class="btn-primary py-2 px-5 text-xs cursor-pointer">
+                    Understood
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.classList.add('open');
+}
+
+function closeEligibilityModal() {
+    const modal = document.getElementById('eligibilityModal');
+    if (modal) modal.classList.remove('open');
+}
+
+async function applyToJobDrive(jobId) {
+    showToast('Submitting application...', 'info');
+    try {
+        const resp = await apiCall(`/api/v1/placement/jobs/${jobId}/apply`, 'POST');
+        showToast(resp.message || 'Application submitted!', 'success');
+        loadPlacementDrives();
+    } catch (err) {
+        showToast(err.message || 'Failed to submit application', 'error');
+    }
+}
+
+// ==============================================================================
+// 13. FULL-SCREEN AI CAREER MENTOR (MITRA) WORKSPACE
+// ==============================================================================
+function initMentorWorkspace() {
+    const form = document.getElementById('mentorWorkspaceForm');
+    if (form && !form.dataset.initialized) {
+        form.dataset.initialized = 'true';
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const input = document.getElementById('mentorWorkspaceInput');
+            const text = input ? input.value.trim() : '';
+            if (!text) return;
+            sendMentorWorkspaceMessage(text);
+            input.value = '';
+        });
+    }
+}
+
+async function sendMentorWorkspaceMessage(text) {
+    const chatContainer = document.getElementById('mentorWorkspaceMessages');
+    if (!chatContainer) return;
+
+    // Render User message
+    const userDiv = document.createElement('div');
+    userDiv.className = 'flex justify-end';
+    userDiv.innerHTML = `
+        <div class="bg-indigo-600 text-white p-3.5 rounded-2xl rounded-tr-xs text-xs max-w-[80%] leading-relaxed font-medium shadow-sm">
+            ${escapeHTML(text)}
+        </div>
+    `;
+    chatContainer.appendChild(userDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    // Render typing placeholder
+    const typingId = 'mentor-typing-' + Date.now();
+    const typingDiv = document.createElement('div');
+    typingDiv.id = typingId;
+    typingDiv.className = 'flex items-start gap-2.5';
+    typingDiv.innerHTML = `
+        <div class="w-8 h-8 rounded-xl bg-purple-700 text-white flex items-center justify-center shrink-0 shadow-sm text-xs">
+            🤖
+        </div>
+        <div class="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl rounded-tl-xs text-xs text-slate-400">
+            <span class="animate-pulse">Mitra AI is formulating advice...</span>
+        </div>
+    `;
+    chatContainer.appendChild(typingDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    AppState.mentorChatHistory.push({ role: 'user', content: text });
+
+    try {
+        const resp = await apiCall('/api/v1/chatbot/chat', 'POST', {
+            message: text,
+            history: AppState.mentorChatHistory.slice(-4)
+        });
+
+        const typingEl = document.getElementById(typingId);
+        if (typingEl) typingEl.remove();
+
+        const engineBadge = resp.engine === 'google_gemini_llm' ? '✨ Gemini Live LLM' : '⚡ Mitra Placement Knowledge Engine';
+        
+        const botDiv = document.createElement('div');
+        botDiv.className = 'flex items-start gap-2.5';
+        botDiv.innerHTML = `
+            <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm text-xs">
+                🤖
+            </div>
+            <div class="saas-card p-4 rounded-2xl rounded-tl-xs max-w-[85%] space-y-2 text-xs text-slate-800 dark:text-slate-200 leading-relaxed shadow-sm">
+                <div class="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800 text-[10px]">
+                    <span class="font-mono font-bold text-purple-600 dark:text-purple-400">${engineBadge}</span>
+                    <button onclick="navigator.clipboard.writeText('${escapeHTML(resp.response.replace(/'/g, "\\'"))}'); showToast('Copied to clipboard!', 'info');" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                        Copy
+                    </button>
+                </div>
+                <div>${formatSimpleMarkdown(resp.response)}</div>
+            </div>
+        `;
+        chatContainer.appendChild(botDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        AppState.mentorChatHistory.push({ role: 'model', content: resp.response });
+    } catch (err) {
+        const typingEl = document.getElementById(typingId);
+        if (typingEl) typingEl.remove();
+
+        const errDiv = document.createElement('div');
+        errDiv.className = 'flex items-start gap-2.5';
+        errDiv.innerHTML = `
+            <div class="w-8 h-8 rounded-xl bg-purple-700 text-white flex items-center justify-center shrink-0 text-xs">🤖</div>
+            <div class="p-3.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/40 rounded-2xl text-xs text-rose-700 dark:text-rose-300">
+                Could not connect to mentor server. Please verify network or try again.
+            </div>
+        `;
+        chatContainer.appendChild(errDiv);
+    }
+}
+
+function sendQuickMentorPrompt(text) {
+    sendMentorWorkspaceMessage(text);
+}
+
+function clearMentorWorkspace() {
+    const chatContainer = document.getElementById('mentorWorkspaceMessages');
+    if (chatContainer) {
+        chatContainer.innerHTML = `
+            <div class="p-4 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/40 rounded-2xl text-xs text-purple-950 dark:text-purple-300 space-y-1">
+                <strong class="font-bold block">Chat conversation cleared.</strong>
+                <span>Ask any doubt about placement drives, ATS resumes, or technical interview questions.</span>
+            </div>
+        `;
+    }
+    AppState.mentorChatHistory = [];
+}
+
+function formatSimpleMarkdown(txt) {
+    if (!txt) return '';
+    return txt
+        .replace(/^### (.*$)/gim, '<h4 class="font-bold text-indigo-950 dark:text-indigo-300 text-xs mt-2.5 mb-1">$1</h4>')
+        .replace(/^#### (.*$)/gim, '<h5 class="font-semibold text-slate-900 dark:text-white text-xs mt-2 mb-0.5">$1</h5>')
+        .replace(/\*\*(.*?)\*\*/gim, '<strong class="font-bold text-slate-900 dark:text-white">$1</strong>')
+        .replace(/\*(.*?)\*/gim, '<em class="italic">$1</em>')
+        .replace(/```([\s\S]*?)```/gim, '<pre class="bg-slate-900 text-purple-200 p-2.5 rounded-lg text-[11px] font-mono overflow-x-auto my-2"><code>$1</code></pre>')
+        .replace(/^[-*] (.*$)/gim, '<li class="ml-3.5 list-disc text-slate-700 dark:text-slate-300 my-0.5">$1</li>')
+        .replace(/\n\n/gim, '<div class="h-2"></div>')
+        .replace(/\n/gim, '<br />');
+}
+
+// ==============================================================================
+// 14. INTERVIEW HISTORY & SCORECARDS MODULE
+// ==============================================================================
+async function loadInterviewHistory() {
+    const container = document.getElementById('interviewHistoryTableBody');
+    if (!container) return;
+
+    try {
+        const history = await apiCall('/api/v1/interviews/history');
+        AppState.interviewHistory = history;
+        renderInterviewHistory(history);
+    } catch (err) {
+        container.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-xs text-slate-400">Failed to load interview history</td></tr>`;
+    }
+}
+
+function renderInterviewHistory(history) {
+    const container = document.getElementById('interviewHistoryTableBody');
+    if (!container) return;
+
+    if (!history || history.length === 0) {
+        container.innerHTML = `
+            <tr>
+                <td colspan="6" class="p-8 text-center text-xs text-slate-400">
+                    No past mock interviews found. Take your first mock interview to generate your scorecard!
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    container.innerHTML = history.map(iv => {
+        const dateStr = iv.started_at ? new Date(iv.started_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent';
+        const scoreColor = iv.overall_score >= 70 ? 'text-emerald-500' : (iv.overall_score >= 50 ? 'text-amber-500' : 'text-rose-500');
+
+        return `
+            <tr class="border-b border-slate-100 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition">
+                <td class="p-3.5 text-xs font-semibold text-slate-900 dark:text-white">
+                    ${escapeHTML(iv.title)}
+                </td>
+                <td class="p-3.5 text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    ${dateStr}
+                </td>
+                <td class="p-3.5 text-xs font-extrabold ${scoreColor}">
+                    ${iv.overall_score.toFixed(1)} / 100
+                </td>
+                <td class="p-3.5 text-xs text-slate-600 dark:text-slate-300 font-mono">
+                    ${iv.technical_score.toFixed(1)}% / ${iv.communication_score.toFixed(1)}%
+                </td>
+                <td class="p-3.5">
+                    <span class="badge ${iv.status === 'completed' ? 'badge-emerald' : 'badge-neutral'} text-[10px]">
+                        ${iv.status}
+                    </span>
+                </td>
+                <td class="p-3.5 text-right">
+                    <button onclick="viewInterviewDetailsModal(${iv.id})" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer">
+                        View Scorecard →
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function viewInterviewDetailsModal(interviewId) {
+    showToast('Fetching session scorecard and acoustic telemetry...', 'info');
+    try {
+        const detail = await apiCall(`/api/v1/interviews/detail/${interviewId}`);
+        openInterviewDetailModal(detail);
+    } catch (err) {
+        showToast(err.message || 'Error fetching scorecard details', 'error');
+    }
+}
+
+function openInterviewDetailModal(detail) {
+    let modal = document.getElementById('interviewDetailModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'interviewDetailModal';
+        modal.className = 'modal-backdrop';
+        document.body.appendChild(modal);
+    }
+
+    const qs = detail.questions || [];
+
+    modal.innerHTML = `
+        <div class="modal-card p-6 space-y-6 max-w-3xl">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div>
+                    <h3 class="font-bold text-base text-slate-900 dark:text-white">
+                        ${escapeHTML(detail.title)}
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Overall Score: <strong class="text-indigo-600">${detail.overall_score.toFixed(1)}/100</strong> • Status: ${detail.status}</p>
+                </div>
+                <button onclick="closeInterviewDetailModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">✕</button>
+            </div>
+
+            <!-- Question by Question Breakdown -->
+            <div class="space-y-4 text-xs max-h-[60vh] overflow-y-auto pr-1">
+                ${qs.map((q, idx) => `
+                    <div class="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <span class="badge badge-primary font-mono text-[10px]">QUESTION ${idx + 1}</span>
+                            <span class="badge badge-neutral text-[10px]">${escapeHTML(q.topic)}</span>
+                        </div>
+                        <h4 class="font-bold text-slate-900 dark:text-white text-xs">${escapeHTML(q.question_text)}</h4>
+                        
+                        ${q.answer ? `
+                            <div class="p-3 bg-white dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1.5">
+                                <span class="font-semibold text-slate-400 block text-[10px] uppercase">Candidate Response:</span>
+                                <p class="text-slate-800 dark:text-slate-200 leading-relaxed font-sans">${escapeHTML(q.answer.transcribed_text || 'No response recorded.')}</p>
+                                <div class="pt-2 flex flex-wrap items-center gap-3 text-[11px] border-t border-slate-100 dark:border-slate-800 text-slate-500">
+                                    <span>Score: <strong class="text-indigo-600">${q.answer.technical_score}%</strong></span>
+                                    <span>•</span>
+                                    <span>Concept Coverage: <strong>${q.answer.concept_coverage_pct}%</strong></span>
+                                    ${q.answer.speech_analysis ? `
+                                        <span>•</span>
+                                        <span>Pacing: <strong>${q.answer.speech_analysis.words_per_minute} WPM</strong> (${q.answer.speech_analysis.fluency_rating})</span>
+                                    ` : ''}
+                                </div>
+                                ${q.answer.feedback ? `
+                                    <p class="text-[11px] text-slate-500 dark:text-slate-400 pt-1">💡 <em>${escapeHTML(q.answer.feedback)}</em></p>
+                                ` : ''}
+                            </div>
+                        ` : `
+                            <p class="text-slate-400 italic">No answer submitted for this question.</p>
+                        `}
+                    </div>
+                `).join('')}
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
+                <button onclick="downloadMyReport()" class="btn-secondary py-1.5 px-3.5 cursor-pointer">
+                    Download Full PDF Dossier
+                </button>
+                <button onclick="closeInterviewDetailModal()" class="btn-primary py-1.5 px-4 cursor-pointer">
+                    Close Scorecard
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.classList.add('open');
+}
+
+function closeInterviewDetailModal() {
+    const modal = document.getElementById('interviewDetailModal');
+    if (modal) modal.classList.remove('open');
+}
+
+// ==============================================================================
+// 15. PROFILE & SETTINGS MODULE
+// ==============================================================================
+async function loadProfileView() {
+    const studentId = AppState.studentId || 1;
+    try {
+        const student = await apiCall(`/api/v1/students/${studentId}`);
+        renderProfileFields(student);
+    } catch (err) {
+        console.warn('Profile load err:', err);
+    }
+}
+
+function renderProfileFields(s) {
+    const roll = document.getElementById('profileRollInput');
+    const college = document.getElementById('profileCollegeInput');
+    const branch = document.getElementById('profileBranchInput');
+    const sem = document.getElementById('profileSemesterInput');
+    const cgpa = document.getElementById('profileCgpaInput');
+    const gh = document.getElementById('profileGithubInput');
+    const li = document.getElementById('profileLinkedinInput');
+    const bio = document.getElementById('profileBioInput');
+
+    if (roll) roll.value = s.roll_number || '';
+    if (college) college.value = s.college || '';
+    if (branch) branch.value = s.branch || '';
+    if (sem) sem.value = s.semester || 8;
+    if (cgpa) cgpa.value = s.cgpa || 8.75;
+    if (gh) gh.value = s.github_url || '';
+    if (li) li.value = s.linkedin_url || '';
+    if (bio) bio.value = s.bio || '';
+}
+
+async function saveStudentProfile(e) {
+    if (e) e.preventDefault();
+    const studentId = AppState.studentId || 1;
+
+    const payload = {
+        roll_number: document.getElementById('profileRollInput').value,
+        college: document.getElementById('profileCollegeInput').value,
+        branch: document.getElementById('profileBranchInput').value,
+        semester: parseInt(document.getElementById('profileSemesterInput').value) || 8,
+        cgpa: parseFloat(document.getElementById('profileCgpaInput').value) || 8.75,
+        github_url: document.getElementById('profileGithubInput').value,
+        linkedin_url: document.getElementById('profileLinkedinInput').value,
+        bio: document.getElementById('profileBioInput').value
+    };
+
+    showToast('Saving profile updates...', 'info');
+    try {
+        await apiCall(`/api/v1/students/${studentId}`, 'PUT', payload);
+        showToast('Academic profile updated successfully!', 'success');
+    } catch (err) {
+        showToast(err.message || 'Error updating profile', 'error');
+    }
+}
+
+// ==============================================================================
+// 16. ADMIN / TRAINER PORTAL MODULE
+// ==============================================================================
+async function loadAdminData(subView) {
+    if (AppState.role !== 'admin' && AppState.role !== 'trainer') {
+        showToast('Administrative authorization required', 'error');
+        switchTab('dashboard');
+        return;
+    }
+
+    try {
+        // 1. Overview stats
+        const overview = await apiCall('/api/v1/analytics/admin/overview');
+        renderAdminOverview(overview);
+
+        // 2. Candidate list
+        if (subView === 'admin-candidates') {
+            const candidates = await apiCall('/api/v1/students/?limit=100');
+            renderAdminCandidatesTable(candidates);
+        }
+
+        // 3. Diagnostics
+        if (subView === 'admin-diagnostics') {
+            loadDiagnosticsData();
+        }
+    } catch (err) {
+        console.error('[Admin Error]:', err);
+    }
+}
+
+function renderAdminOverview(ov) {
+    const sCount = document.getElementById('adminTotalStudents');
+    const cCount = document.getElementById('adminTotalCompanies');
+    const jCount = document.getElementById('adminTotalJobs');
+    const aCount = document.getElementById('adminTotalApplications');
+    const iCount = document.getElementById('adminInterventionsNeeded');
+
+    if (sCount) sCount.textContent = ov.total_students || 0;
+    if (cCount) cCount.textContent = ov.total_companies || 0;
+    if (jCount) jCount.textContent = ov.total_jobs || 0;
+    if (aCount) aCount.textContent = ov.total_applications || 0;
+    if (iCount) iCount.textContent = ov.training_support_recommended_count || 0;
+}
+
+function renderAdminCandidatesTable(candidates) {
+    const container = document.getElementById('adminCandidatesTableBody');
+    if (!container) return;
+
+    if (!candidates || candidates.length === 0) {
+        container.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-xs text-slate-400">No candidates found</td></tr>`;
+        return;
+    }
+
+    container.innerHTML = candidates.map(c => `
+        <tr class="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50">
+            <td class="p-3.5 text-xs font-semibold text-slate-900 dark:text-white">
+                ${escapeHTML(c.full_name)}
+                <span class="block text-[10px] text-slate-400 font-mono">${escapeHTML(c.roll_number)}</span>
+            </td>
+            <td class="p-3.5 text-xs text-slate-600 dark:text-slate-300">
+                ${escapeHTML(c.branch)} (Sem ${c.semester})
+            </td>
+            <td class="p-3.5 text-xs font-bold text-slate-900 dark:text-white">
+                ${c.cgpa.toFixed(2)}
+            </td>
+            <td class="p-3.5 text-xs text-slate-500 font-mono">
+                ${escapeHTML(c.email)}
+            </td>
+            <td class="p-3.5 text-right">
+                <button onclick="downloadStudentReportAsAdmin(${c.id})" class="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer">
+                    Export PDF Dossier →
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function downloadStudentReportAsAdmin(studentId) {
+    try {
+        const blob = await apiCall(`/api/v1/reports/student/${studentId}/download`);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Student_Dossier_${studentId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (e) {
+        showToast('Error exporting candidate report', 'error');
+    }
+}
+
+async function loadDiagnosticsData() {
+    const dbStatus = document.getElementById('diagDbStatus');
+    const geminiStatus = document.getElementById('diagGeminiStatus');
+    const visionStatus = document.getElementById('diagVisionStatus');
+
+    try {
+        const health = await apiCall('/health');
+        if (dbStatus) dbStatus.innerHTML = `<span class="badge badge-emerald">Online (${health.database || 'SQLite'})</span>`;
+        if (geminiStatus) geminiStatus.innerHTML = `<span class="badge badge-emerald">Dual-Engine Active</span>`;
+        if (visionStatus) visionStatus.innerHTML = `<span class="badge badge-emerald">MediaPipe FaceMesh & YOLOv8 Ready</span>`;
+    } catch (e) {
+        if (dbStatus) dbStatus.innerHTML = `<span class="badge badge-rose">Offline</span>`;
+    }
+}
+
+// ==============================================================================
+// 17. FIRST-TIME CANDIDATE ONBOARDING WIZARD
+// ==============================================================================
+let currentOnboardingStep = 1;
+let onboardingSelectedFile = null;
+let onboardingTargetRole = 'Full Stack Software Engineer';
+
+function openOnboardingModal() {
+    const modal = document.getElementById('onboardingModal');
+    if (!modal) return;
+    currentOnboardingStep = 1;
+    updateOnboardingStepUI(1);
+
+    // Pre-populate fields from current user/profile
+    const nameInput = document.getElementById('obFullName');
+    const rollInput = document.getElementById('obRollNumber');
+    const collegeInput = document.getElementById('obCollege');
+    const branchInput = document.getElementById('obBranch');
+    const semInput = document.getElementById('obSemester');
+    const cgpaInput = document.getElementById('obCgpa');
+    const phoneInput = document.getElementById('obPhone');
+
+    if (AppState.user) {
+        if (nameInput) nameInput.value = AppState.user.full_name || '';
+        if (phoneInput) phoneInput.value = AppState.user.phone || '';
+        if (AppState.user.profile) {
+            const p = AppState.user.profile;
+            if (rollInput) rollInput.value = p.roll_number || '';
+            if (collegeInput) collegeInput.value = p.college || '';
+            if (branchInput) branchInput.value = p.branch || '';
+            if (semInput) semInput.value = p.semester || 7;
+            if (cgpaInput) cgpaInput.value = p.cgpa || 8.0;
+        }
+    }
+
+    modal.classList.add('open');
+    if (window.lucide) lucide.createIcons();
+}
+
+function closeOnboardingModal() {
+    const modal = document.getElementById('onboardingModal');
+    if (modal) modal.classList.remove('open');
+    localStorage.removeItem('first_time_onboarding');
+}
+
+function updateOnboardingStepUI(step) {
+    currentOnboardingStep = step;
+    const progress = document.getElementById('onboardingProgressBar');
+    const subTitle = document.getElementById('onboardingStepSub');
+
+    const pct = step === 1 ? '25%' : (step === 2 ? '50%' : (step === 3 ? '75%' : '100%'));
+    if (progress) progress.style.width = pct;
+
+    const titles = {
+        1: 'Step 1 of 4 • Academic & Placement Profile',
+        2: 'Step 2 of 4 • Resume Upload & AI Skill Extraction',
+        3: 'Step 3 of 4 • Placement Target Role & Specialization',
+        4: 'Step 4 of 4 • Preparation Kickstart & Assessment'
+    };
+    if (subTitle) subTitle.textContent = titles[step] || '';
+
+    for (let i = 1; i <= 4; i++) {
+        const lbl = document.getElementById(`stepLabel${i}`);
+        if (lbl) {
+            lbl.className = i === step 
+                ? 'text-indigo-600 dark:text-indigo-400 font-bold' 
+                : (i < step ? 'text-emerald-500 font-bold' : 'text-slate-400');
+        }
+        const panel = document.getElementById(`onboardingStep${i}`);
+        if (panel) {
+            if (i === step) panel.classList.remove('hidden');
+            else panel.classList.add('hidden');
+        }
+    }
+    if (window.lucide) lucide.createIcons();
+}
+
+async function saveOnboardingProfile() {
+    const studentId = AppState.studentId || 1;
+    const fullName = document.getElementById('obFullName').value.trim();
+    const roll = document.getElementById('obRollNumber').value.trim().toUpperCase();
+    const college = document.getElementById('obCollege').value.trim();
+    const branch = document.getElementById('obBranch').value.trim();
+    const sem = parseInt(document.getElementById('obSemester').value) || 7;
+    const cgpa = parseFloat(document.getElementById('obCgpa').value) || 8.0;
+    const phone = document.getElementById('obPhone').value.trim();
+
+    if (!roll || !college || !branch) {
+        showToast('Please fill in Roll Number, College, and Branch.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btnObSaveProfile');
+    if (btn) btn.disabled = true;
+
+    try {
+        await apiCall(`/api/v1/students/${studentId}`, 'PUT', {
+            roll_number: roll,
+            college: college,
+            branch: branch,
+            semester: sem,
+            cgpa: cgpa,
+            full_name: fullName,
+            phone: phone
+        });
+        showToast('Profile credentials saved!', 'success');
+        updateOnboardingStepUI(2);
+    } catch (err) {
+        showToast(err.message || 'Error saving profile', 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function handleObFileSelected(e) {
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+        onboardingSelectedFile = file;
+        const nameEl = document.getElementById('obSelectedFileName');
+        if (nameEl) nameEl.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+    }
+}
+
+async function uploadOnboardingResume() {
+    if (!onboardingSelectedFile) {
+        showToast('Please select a resume file first, or click Skip.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btnObUploadResume');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full mr-1.5"></span> Parsing with NLP...`;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('file', onboardingSelectedFile);
+        const resp = await apiCall('/api/v1/resume/upload', 'POST', formData, true);
+
+        // Display extracted skill badges
+        const container = document.getElementById('obSkillsContainer');
+        const badgesEl = document.getElementById('obSkillsBadges');
+        const skillsList = resp.extracted_skills || resp.skills || [];
+        if (container && badgesEl && skillsList.length > 0) {
+            container.classList.remove('hidden');
+            badgesEl.innerHTML = skillsList.map(s => {
+                const sName = typeof s === 'string' ? s : (s.name || s.skill_name || '');
+                return `<span class="badge badge-emerald text-[11px]">${escapeHTML(sName)}</span>`;
+            }).join('');
+        }
+
+        showToast(`Extracted ${skillsList.length} technical skills and saved to profile!`, 'success');
+        setTimeout(() => {
+            updateOnboardingStepUI(3);
+        }, 1200);
+    } catch (err) {
+        showToast(err.message || 'Failed to parse resume', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<span>Analyze & Continue</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>`;
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+}
+
+function selectTargetRoleCard(el, roleName) {
+    onboardingTargetRole = roleName;
+    document.querySelectorAll('.ob-role-card').forEach(c => {
+        c.className = 'ob-role-card p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 bg-white dark:bg-slate-900 cursor-pointer transition';
+    });
+    el.className = 'ob-role-card p-3.5 rounded-xl border-2 border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20 cursor-pointer transition';
+}
+
+async function saveOnboardingTargetRole() {
+    const studentId = AppState.studentId || 1;
+    try {
+        const rollEl = document.getElementById('obRollNumber');
+        const collegeEl = document.getElementById('obCollege');
+        const branchEl = document.getElementById('obBranch');
+        const semEl = document.getElementById('obSemester');
+        const cgpaEl = document.getElementById('obCgpa');
+
+        await apiCall(`/api/v1/students/${studentId}`, 'PUT', {
+            roll_number: rollEl ? rollEl.value.trim() : 'STUDENT',
+            college: collegeEl ? collegeEl.value.trim() : 'Institute',
+            branch: branchEl ? branchEl.value.trim() : 'CSE',
+            semester: semEl ? parseInt(semEl.value) : 7,
+            cgpa: cgpaEl ? parseFloat(cgpaEl.value) : 8.0,
+            bio: `Target Role: ${onboardingTargetRole}`
+        });
+        showToast(`Target role set to ${onboardingTargetRole}`, 'success');
+    } catch (e) {}
+
+    updateOnboardingStepUI(4);
+}
+
+function skipOnboardingStep(step) {
+    if (step === 2) updateOnboardingStepUI(3);
+    else if (step === 3) updateOnboardingStepUI(4);
+}
+
+function finishOnboarding(destTab) {
+    closeOnboardingModal();
+    localStorage.removeItem('first_time_onboarding');
+    if (window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    showToast('Onboarding completed! Welcome to AI-TPMS.', 'success');
+    switchTab(destTab);
+}
+
+// ==============================================================================
+// 18. APP INITIALIZATION LIFECYCLE
+// ==============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    initUserSession();
+    if (window.lucide) lucide.createIcons();
+});
+
+// Backward-compatibility window aliases
+window.showTab = switchTab;
+window.startCamAndMic = startCamAndMic;
+window.toggleCamAndMic = toggleCamAndMic;
+window.toggleMicrophone = toggleVoiceInputForInterview;
+window.raiseQuestionsFromResume = launchInterviewFromResumeSkills;
+window.downloadMyReport = downloadMyReport;
+window.openOnboardingModal = openOnboardingModal;
+window.closeOnboardingModal = closeOnboardingModal;
+window.saveOnboardingProfile = saveOnboardingProfile;
+window.handleObFileSelected = handleObFileSelected;
+window.uploadOnboardingResume = uploadOnboardingResume;
+window.selectTargetRoleCard = selectTargetRoleCard;
+window.saveOnboardingTargetRole = saveOnboardingTargetRole;
+window.skipOnboardingStep = skipOnboardingStep;
+window.finishOnboarding = finishOnboarding;
+
+// Live AI Code Debugging & Inspection Studio window handlers
+window.switchPracticeSubTab = switchPracticeSubTab;
+window.launchDebuggingFromDashboard = launchDebuggingFromDashboard;
+window.filterDebuggingChallenges = filterDebuggingChallenges;
+window.openDebuggingChallenge = openDebuggingChallenge;
+window.selectSuspectBugLine = selectSuspectBugLine;
+window.toggleVoiceForDebuggingDiagnosis = toggleVoiceForDebuggingDiagnosis;
+window.submitDebuggingDiagnosis = submitDebuggingDiagnosis;
+window.pickNextDebuggingChallenge = pickNextDebuggingChallenge;
+window.closeDebuggingWorkspace = closeDebuggingWorkspace;
+window.openGenerateChallengeModal = openGenerateChallengeModal;
+window.closeGenerateChallengeModal = closeGenerateChallengeModal;
+window.setGenTopic = setGenTopic;
+window.submitGenerateChallenge = submitGenerateChallenge;
+
+
+

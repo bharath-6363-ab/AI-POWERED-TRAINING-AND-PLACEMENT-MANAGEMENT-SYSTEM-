@@ -1,0 +1,40 @@
+# Environment and secrets (CRITICAL: Do not commit API keys or credentials)
+.env
+.env*.local
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Build & packaging
+.dist/
+dist/
+build/
+*.egg-info/
+
+# Uploaded candidate files and generated audio/reports
+uploads/*
+!uploads/.gitkeep
+!uploads/audio/.gitkeep
+!uploads/reports/.gitkeep
+!uploads/resumes/.gitkeep
+
+# IDE and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-TPMS - Student Registration & Candidate Onboarding</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/static/app.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4 sm:p-6 font-sans">
+
+    <div class="max-w-2xl w-full bg-slate-900/85 backdrop-blur-2xl border border-indigo-500/20 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6">
+        
+        <!-- Header & Branding -->
+        <div class="text-center space-y-2">
+            <div class="w-14 h-14 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                <i data-lucide="graduation-cap" class="w-8 h-8 text-white"></i>
+            </div>
+            <h1 class="text-2xl font-extrabold tracking-tight text-white">Create Student Account</h1>
+            <p class="text-xs text-indigo-300 max-w-md mx-auto">
+                Join the AI-Powered Training & Placement Management System to access automated ATS scoring, 47 corporate recruitment pipelines, and AI mock interviews.
+            </p>
+        </div>
+
+        <!-- Role Badge (Immutable Safe Role) -->
+        <div class="flex items-center justify-center">
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-mono font-medium">
+                <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+                <span>Verified Candidate Registration • Student Access Only</span>
+            </div>
+        </div>
+
+        <!-- Global Error & Success Banners -->
+        <div id="registerError" class="p-3.5 bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs rounded-xl hidden flex items-start gap-2.5">
+            <i data-lucide="alert-circle" class="w-4 h-4 shrink-0 mt-0.5 text-rose-400"></i>
+            <span id="registerErrorText"></span>
+        </div>
+
+        <div id="registerSuccess" class="p-3.5 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs rounded-xl hidden flex items-start gap-2.5">
+            <i data-lucide="check-circle-2" class="w-4 h-4 shrink-0 mt-0.5 text-emerald-400"></i>
+            <span>Account created successfully! Redirecting to student onboarding...</span>
+        </div>
+
+        <!-- Registration Form -->
+        <form id="registerForm" onsubmit="handleRegister(event)" class="space-y-5">
+            
+            <!-- SECTION 1: Personal & Institutional Identity -->
+            <div class="space-y-3">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-300 block pb-1 border-b border-slate-800">
+                    1. Candidate Identity
+                </span>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <!-- Full Name -->
+                    <div>
+                        <label for="fullName" class="block text-xs font-semibold text-slate-300 mb-1">
+                            Full Name <span class="text-rose-400">*</span>
+                        </label>
+                        <div class="relative">
+                            <i data-lucide="user" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                            <input type="text" id="fullName" required placeholder="e.g. Priya Sharma" class="w-full pl-10 pr-4 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition" />
+                        </div>
+                    </div>
+
+                    <!-- Roll Number / USN -->
+                    <div>
+                        <label for="rollNumber" class="block text-xs font-semibold text-slate-300 mb-1">
+                            University Roll No. / USN <span class="text-rose-400">*</span>
+                        </label>
+                        <div class="relative">
+                            <i data-lucide="badge-check" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                            <input type="text" id="rollNumber" required placeholder="e.g. 1RV21CS099" class="w-full pl-10 pr-4 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white uppercase placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition font-mono" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <!-- Email Address -->
+                    <div>
+                        <label for="email" class="block text-xs font-semibold text-slate-300 mb-1">
+                            Institutional / Student Email <span class="text-rose-400">*</span>
+                        </label>
+                        <div class="relative">
+                            <i data-lucide="mail" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                            <input type="email" id="email" required placeholder="priya.sharma@student.edu" class="w-full pl-10 pr-4 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition" />
+                        </div>
+                    </div>
+
+                    <!-- Phone (Optional) -->
+                    <div>
+                        <label for="phone" class="block text-xs font-semibold text-slate-300 mb-1">
+                            Contact Number <span class="text-slate-500 text-[10px]">(Optional)</span>
+                        </label>
+                        <div class="relative">
+                            <i data-lucide="phone" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                            <input type="tel" id="phone" placeholder="+91 98765 43210" class="w-full pl-10 pr-4 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2: Academic Profile -->
+            <div class="space-y-3 pt-2">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-300 block pb-1 border-b border-slate-800">
+                    2. Academic & Placement Eligibility
+                </span>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <!-- College / Institute -->
+                    <div>
+                        <label for="college" class="block text-xs font-semibold text-slate-300 mb-1">
+                            College / Institute Name <span class="text-rose-400">*</span>
+                        </label>
+                        <div class="relative">
+                            <i data-lucide="building-2" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                            <input type="text" id="college" required value="National Institute of Technology" placeholder="College or University" class="w-full pl-10 pr-4 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition" />
+                        </div>
+                    </div>
+
+                    <!-- Branch / Department -->
+                    <div>
+                        <label for="branch" class="block text-xs font-semibold text-slate-300 mb-1">
+                            Branch / Discipline <span class="text-rose-400">*</span>
+                        </label>
+                        <div class="relative">
+                            <i data-lucide="book-marked" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                            <select id="branch" required class="w-full pl-10 pr-4 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition">
+                                <option value="Computer Science and Engineering" selected>Computer Science and Engineering</option>
+                                <option value="Information Technology">Information Technology</option>
+                                <option value="Electronics & Communication">Electronics & Communication</option>
+                                <option value="Artificial Intelligence & ML">Artificial Intelligence & ML</option>
+                                <option value="Data Science & Engineering">Data Science & Engineering</option>
+                                <option value="Electrical Engineering">Electrical Engineering</option>
+                                <option value="Mechanical Engineering">Mechanical Engineering</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <!-- Current Semester -->
+                    <div>
+                        <label for="semester" class="block text-xs font-semibold text-slate-300 mb-1">
+                            Current Semester / Batch
+                        </label>
+                        <div class="relative">
+                            <i data-lucide="calendar" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                            <select id="semester" class="w-full pl-10 pr-4 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition">
+                                <option value="7" selected>Semester 7 (Final Year Placement)</option>
+                                <option value="8">Semester 8 (Internship & Placement)</option>
+                                <option value="5">Semester 5 (Pre-Final Year)</option>
+                                <option value="6">Semester 6 (Pre-Final Year)</option>
+                                <option value="1">Semester 1</option>
+                                <option value="2">Semester 2</option>
+                                <option value="3">Semester 3</option>
+                                <option value="4">Semester 4</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- CGPA -->
+                    <div>
+                        <label for="cgpa" class="block text-xs font-semibold text-slate-300 mb-1">
+                            Aggregate CGPA (out of 10.0) <span class="text-rose-400">*</span>
+                        </label>
+                        <div class="relative">
+                            <i data-lucide="award" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                            <input type="number" step="0.01" min="0.0" max="10.0" id="cgpa" required value="8.25" placeholder="8.50" class="w-full pl-10 pr-4 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition font-mono" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 3: Account Security & Password -->
+            <div class="space-y-3 pt-2">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-300 block pb-1 border-b border-slate-800">
+                    3. Security Credentials
+                </span>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <!-- Password -->
+                    <div>
+                        <label for="password" class="block text-xs font-semibold text-slate-300 mb-1">
+                            Password <span class="text-rose-400">*</span>
+                        </label>
+                        <div class="relative">
+                            <i data-lucide="lock" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                            <input type="password" id="password" required oninput="evaluatePasswordStrength()" placeholder="••••••••" class="w-full pl-10 pr-10 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition" />
+                            <button type="button" onclick="togglePasswordVisibility('password', 'pwdToggleIcon1')" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200">
+                                <i id="pwdToggleIcon1" data-lucide="eye" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Confirm Password -->
+                    <div>
+                        <label for="confirmPassword" class="block text-xs font-semibold text-slate-300 mb-1">
+                            Confirm Password <span class="text-rose-400">*</span>
+                        </label>
+                        <div class="relative">
+                            <i data-lucide="lock-keyhole" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                            <input type="password" id="confirmPassword" required oninput="evaluatePasswordStrength()" placeholder="••••••••" class="w-full pl-10 pr-10 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition" />
+                            <button type="button" onclick="togglePasswordVisibility('confirmPassword', 'pwdToggleIcon2')" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200">
+                                <i id="pwdToggleIcon2" data-lucide="eye" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Password Requirements Checklist -->
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700/60 text-[11px] space-y-1.5">
+                    <div class="flex items-center justify-between text-slate-400">
+                        <span>Password Strength:</span>
+                        <span id="strengthText" class="font-bold text-slate-400">Too Short</span>
+                    </div>
+                    <div class="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div id="strengthBar" class="h-full w-0 bg-rose-500 transition-all duration-300"></div>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-1 pt-1 text-[10px]">
+                        <span id="chkLength" class="text-slate-500 flex items-center gap-1">✕ At least 8 characters</span>
+                        <span id="chkNumber" class="text-slate-500 flex items-center gap-1">✕ Contains a number</span>
+                        <span id="chkMatch" class="text-slate-500 flex items-center gap-1">✕ Passwords match</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="btnRegisterSubmit" class="w-full py-3.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer mt-6">
+                <span>Create Student Account & Start Onboarding</span>
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+        </form>
+
+        <!-- Footer / Link to Login -->
+        <div class="text-center text-xs text-slate-400 pt-3 border-t border-slate-800 flex items-center justify-center gap-2">
+            <span>Already have a candidate or demo account?</span>
+            <a href="/static/login.html" class="text-indigo-400 hover:text-indigo-300 font-bold underline transition">
+                Sign in to Placement Portal
+            </a>
+        </div>
+
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        function togglePasswordVisibility(fieldId, iconId) {
+            const field = document.getElementById(fieldId);
+            const icon = document.getElementById(iconId);
+            if (!field) return;
+
+            if (field.type === 'password') {
+                field.type = 'text';
+                icon.setAttribute('data-lucide', 'eye-off');
+            } else {
+                field.type = 'password';
+                icon.setAttribute('data-lucide', 'eye');
+            }
+            lucide.createIcons();
+        }
+
+        function evaluatePasswordStrength() {
+            const pwd = document.getElementById('password').value;
+            const confirm = document.getElementById('confirmPassword').value;
+
+            const chkLength = document.getElementById('chkLength');
+            const chkNumber = document.getElementById('chkNumber');
+            const chkMatch = document.getElementById('chkMatch');
+            const strengthBar = document.getElementById('strengthBar');
+            const strengthText = document.getElementById('strengthText');
+
+            const hasLength = pwd.length >= 8;
+            const hasNumber = /\d/.test(pwd);
+            const isMatch = pwd.length > 0 && pwd === confirm;
+
+            // Update badges
+            chkLength.innerHTML = hasLength ? '✓ At least 8 characters' : '✕ At least 8 characters';
+            chkLength.className = hasLength ? 'text-emerald-400 flex items-center gap-1 font-medium' : 'text-slate-500 flex items-center gap-1';
+
+            chkNumber.innerHTML = hasNumber ? '✓ Contains a number' : '✕ Contains a number';
+            chkNumber.className = hasNumber ? 'text-emerald-400 flex items-center gap-1 font-medium' : 'text-slate-500 flex items-center gap-1';
+
+            chkMatch.innerHTML = isMatch ? '✓ Passwords match' : '✕ Passwords match';
+            chkMatch.className = isMatch ? 'text-emerald-400 flex items-center gap-1 font-medium' : 'text-slate-500 flex items-center gap-1';
+
+            let score = 0;
+            if (hasLength) score++;
+            if (hasNumber) score++;
+            if (/[A-Z]/.test(pwd)) score++;
+            if (/[^A-Za-z0-9]/.test(pwd)) score++;
+            if (isMatch) score++;
+
+            if (pwd.length === 0) {
+                strengthBar.style.width = '0%';
+                strengthText.textContent = 'Enter Password';
+                strengthText.className = 'font-bold text-slate-400';
+            } else if (score <= 2) {
+                strengthBar.style.width = '33%';
+                strengthBar.className = 'h-full bg-rose-500 transition-all duration-300';
+                strengthText.textContent = 'Weak';
+                strengthText.className = 'font-bold text-rose-400';
+            } else if (score <= 4) {
+                strengthBar.style.width = '66%';
+                strengthBar.className = 'h-full bg-amber-500 transition-all duration-300';
+                strengthText.textContent = 'Moderate';
+                strengthText.className = 'font-bold text-amber-400';
+            } else {
+                strengthBar.style.width = '100%';
+                strengthBar.className = 'h-full bg-emerald-500 transition-all duration-300';
+                strengthText.textContent = 'Strong';
+                strengthText.className = 'font-bold text-emerald-400';
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnRegisterSubmit');
+            const errDiv = document.getElementById('registerError');
+            const errText = document.getElementById('registerErrorText');
+            const successDiv = document.getElementById('registerSuccess');
+
+            errDiv.classList.add('hidden');
+            successDiv.classList.add('hidden');
+
+            const fullName = document.getElementById('fullName').value.trim();
+            const rollNumber = document.getElementById('rollNumber').value.trim().toUpperCase();
+            const email = document.getElementById('email').value.trim().toLowerCase();
+            const phone = document.getElementById('phone').value.trim();
+            const college = document.getElementById('college').value.trim();
+            const branch = document.getElementById('branch').value.trim();
+            const semester = parseInt(document.getElementById('semester').value, 10) || 7;
+            const cgpa = parseFloat(document.getElementById('cgpa').value) || 0.0;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            // Client-side validations
+            if (fullName.length < 2) {
+                errText.textContent = 'Full name must contain at least 2 characters.';
+                errDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (!rollNumber) {
+                errText.textContent = 'University Roll Number or USN is required.';
+                errDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (password.length < 8) {
+                errText.textContent = 'Password must be at least 8 characters long.';
+                errDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                errText.textContent = 'Passwords do not match. Please re-enter identical passwords.';
+                errDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (isNaN(cgpa) || cgpa < 0.0 || cgpa > 10.0) {
+                errText.textContent = 'CGPA must be a valid number between 0.0 and 10.0.';
+                errDiv.classList.remove('hidden');
+                return;
+            }
+
+            // Lock UI and show spinner
+            btn.disabled = true;
+            btn.innerHTML = `<span class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></span> Creating Account & Securing Credentials...`;
+
+            try {
+                const resp = await fetch('/api/v1/auth/register/student', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        full_name: fullName,
+                        roll_number: rollNumber,
+                        email: email,
+                        phone: phone || null,
+                        college: college,
+                        branch: branch,
+                        semester: semester,
+                        cgpa: cgpa,
+                        password: password,
+                        github_url: null,
+                        linkedin_url: null
+                    })
+                });
+
+                const data = await resp.json();
+                if (!resp.ok) {
+                    throw new Error(data.detail || 'Registration failed. Please check your information.');
+                }
+
+                // Store credentials
+                localStorage.setItem('token', data.access_token);
+                localStorage.setItem('role', 'student');
+                localStorage.setItem('userEmail', email);
+                if (data.student_id) {
+                    localStorage.setItem('studentId', data.student_id);
+                }
+                if (data.full_name) {
+                    localStorage.setItem('user', JSON.stringify(data));
+                }
+                localStorage.setItem('first_time_onboarding', 'true');
+
+                successDiv.classList.remove('hidden');
+                btn.innerHTML = `<span>Redirecting to Onboarding...</span> <i data-lucide="check" class="w-4 h-4"></i>`;
+                lucide.createIcons();
+
+                setTimeout(() => {
+                    window.location.href = '/static/index.html?onboarding=true';
+                }, 1200);
+
+            } catch (err) {
+                errText.textContent = err.message;
+                errDiv.classList.remove('hidden');
+                btn.disabled = false;
+                btn.innerHTML = `<span>Create Student Account & Start Onboarding</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>`;
+                lucide.createIcons();
+            }
+        }
+    </script>
+</body>
+</html>

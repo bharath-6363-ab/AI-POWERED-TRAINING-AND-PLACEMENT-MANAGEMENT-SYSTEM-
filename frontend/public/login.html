@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-TPMS - Institutional Placement Portal Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4 font-sans relative overflow-hidden">
+    <div class="max-w-md w-full bg-slate-900/85 backdrop-blur-2xl border border-indigo-500/30 rounded-3xl p-8 shadow-2xl shadow-indigo-500/20 space-y-6 relative z-10 animate-fadeIn">
+        <!-- Logo and Title -->
+        <div class="text-center space-y-2">
+            <div class="w-14 h-14 bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-indigo-500/40 transform hover:scale-105 transition">
+                <i data-lucide="graduation-cap" class="w-8 h-8 text-white"></i>
+            </div>
+            <h1 class="text-2xl font-extrabold font-display tracking-tight text-white">AI-TPMS Portal</h1>
+            <p class="text-xs text-indigo-300">Intelligent Training & Placement Management System</p>
+        </div>
+
+        <!-- Role Quick Switcher Pills -->
+        <div class="space-y-2">
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block text-center font-mono">1-Click Demo Profiles</span>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+                <button onclick="fillDemo('admin@college.edu', 'Admin@123', 'admin')" class="p-2.5 bg-slate-800/80 hover:bg-indigo-600/30 border border-slate-700/80 hover:border-indigo-500/50 rounded-xl transition text-left group">
+                    <span class="font-bold text-indigo-300 group-hover:text-white block">Placement Director</span>
+                    <span class="text-[10px] text-slate-400">Dr. Sharma (Admin)</span>
+                </button>
+                <button onclick="fillDemo('trainer@college.edu', 'Trainer@123', 'trainer')" class="p-2.5 bg-slate-800/80 hover:bg-indigo-600/30 border border-slate-700/80 hover:border-indigo-500/50 rounded-xl transition text-left group">
+                    <span class="font-bold text-purple-300 group-hover:text-white block">Faculty Trainer</span>
+                    <span class="text-[10px] text-slate-400">Prof. Verma (Trainer)</span>
+                </button>
+                <button onclick="fillDemo('aditi.rao@student.edu', 'Student@123', 'student')" class="p-2.5 bg-slate-800/80 hover:bg-emerald-600/30 border border-slate-700/80 hover:border-emerald-500/50 rounded-xl transition text-left group">
+                    <span class="font-bold text-emerald-300 group-hover:text-white block">High Performer</span>
+                    <span class="text-[10px] text-slate-400">Aditi Rao (CGPA 8.75)</span>
+                </button>
+                <button onclick="fillDemo('rohan.mehta@student.edu', 'Student@123', 'student')" class="p-2.5 bg-slate-800/80 hover:bg-amber-600/30 border border-slate-700/80 hover:border-amber-500/50 rounded-xl transition text-left group">
+                    <span class="font-bold text-amber-300 group-hover:text-white block">Needs Support</span>
+                    <span class="text-[10px] text-slate-400">Rohan Mehta (Intervention)</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Login Form -->
+        <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4 pt-2">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Institutional Email</label>
+                <div class="relative">
+                    <i data-lucide="mail" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                    <input type="email" id="loginEmail" required value="" placeholder="name@college.edu" class="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition" />
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Password</label>
+                <div class="relative">
+                    <i data-lucide="lock" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                    <input type="password" id="loginPassword" required value="" placeholder="••••••••" class="w-full pl-10 pr-10 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition" />
+                    <button type="button" onclick="toggleLoginPassword()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200">
+                        <i id="loginPwdIcon" data-lucide="eye" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="loginError" class="p-3 bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs rounded-xl hidden"></div>
+
+            <button type="submit" id="btnLoginSubmit" class="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer">
+                <span>Enter Placement Portal</span>
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+        </form>
+
+        <!-- New Student Registration Link -->
+        <div class="p-3.5 rounded-2xl bg-indigo-950/40 border border-indigo-500/20 text-center space-y-1">
+            <span class="text-xs text-slate-300 block">New student candidate?</span>
+            <a href="/static/register.html" class="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-bold transition">
+                <span>Register for Placement Drives & Onboarding</span>
+                <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+            </a>
+        </div>
+
+        <div class="text-center text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+            <span>Deterministic 3-Round Pipeline & Proctoring Integrity Subsystems Active</span>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        function toggleLoginPassword() {
+            const pwdInput = document.getElementById('loginPassword');
+            const icon = document.getElementById('loginPwdIcon');
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                icon.setAttribute('data-lucide', 'eye-off');
+            } else {
+                pwdInput.type = 'password';
+                icon.setAttribute('data-lucide', 'eye');
+            }
+            lucide.createIcons();
+        }
+
+        function fillDemo(email, pass, role) {
+            document.getElementById('loginEmail').value = email;
+            document.getElementById('loginPassword').value = pass;
+            document.getElementById('loginError').classList.add('hidden');
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnLoginSubmit');
+            const errDiv = document.getElementById('loginError');
+            btn.disabled = true;
+            btn.innerHTML = `<span class="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full mr-2"></span> Authenticating...`;
+            errDiv.classList.add('hidden');
+
+            const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const resp = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await resp.json();
+                if (!resp.ok) {
+                    throw new Error(data.detail || 'Authentication failed');
+                }
+
+                localStorage.setItem('token', data.access_token);
+                localStorage.setItem('role', data.role);
+                localStorage.setItem('userEmail', email);
+                if (data.student_id) {
+                    localStorage.setItem('studentId', data.student_id);
+                }
+                if (data.full_name) {
+                    localStorage.setItem('user', JSON.stringify(data));
+                }
+
+                window.location.href = '/';
+            } catch (err) {
+                errDiv.textContent = err.message;
+                errDiv.classList.remove('hidden');
+                btn.disabled = false;
+                btn.innerHTML = `<span>Enter Placement Portal</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>`;
+                lucide.createIcons();
+            }
+        }
+    </script>
+    <script src="/static/chatbot.js"></script>
+</body>
+</html>
